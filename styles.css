@@ -103,6 +103,14 @@ textarea:focus,
   flex-wrap: wrap;
 }
 
+.project-switcher {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+  margin-bottom: 12px;
+}
+
 .app-shell {
   display: grid;
   grid-template-columns: minmax(300px, 0.85fr) minmax(360px, 1.15fr);
@@ -226,6 +234,14 @@ textarea {
   width: 100%;
   height: 100%;
   object-fit: contain;
+  transform-origin: center center;
+}
+
+.map-label-image {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
 }
 
 .map-canvas.has-image {
@@ -234,6 +250,10 @@ textarea {
 
 .map-canvas.has-image img {
   display: block;
+}
+
+.map-canvas:not(.has-labels) .map-label-image {
+  display: none;
 }
 
 .map-placeholder {
@@ -260,25 +280,54 @@ textarea {
   position: absolute;
   inset: 0;
   pointer-events: none;
+  transform-origin: center center;
+  z-index: 2;
 }
 
 .pin {
   position: absolute;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  transform: translate(-8px, -8px);
+  gap: calc(8px * var(--marker-zoom, var(--map-zoom, 1)));
+  transform: translate(calc(-8px * var(--marker-zoom, var(--map-zoom, 1))), calc(-8px * var(--marker-zoom, var(--map-zoom, 1))));
   color: #111;
-  font-size: 12px;
+  font-size: calc(12px * var(--marker-zoom, var(--map-zoom, 1)));
   font-weight: 800;
   text-shadow: 0 1px 2px #fff, 0 -1px 2px #fff, 1px 0 2px #fff, -1px 0 2px #fff;
+}
+
+.pipe-origin,
+.report-pipe-origin {
+  position: absolute;
+  width: 0;
+  height: 0;
+  transform-origin: center center;
+}
+
+.pipe-bearing {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: calc(4px * var(--marker-zoom, var(--map-zoom, 1)));
+  background: rgba(156, 79, 47, 0.9);
+  border: 1px solid #fff;
+  box-shadow: 0 0 0 1px #111;
+  transform-origin: bottom center;
+}
+
+.pipe-arm-start {
+  transform: translateX(-50%);
+}
+
+.pipe-arm-end {
+  transform: translateX(-50%) rotate(180deg);
 }
 
 .pin i {
   position: relative;
   flex: 0 0 auto;
-  width: 16px;
-  height: 16px;
+  width: calc(16px * var(--marker-zoom, var(--map-zoom, 1)));
+  height: calc(16px * var(--marker-zoom, var(--map-zoom, 1)));
   border: 2px solid #111;
   border-radius: 50%;
   background: #fff;
@@ -294,16 +343,16 @@ textarea {
 
 .pin i::before {
   left: 50%;
-  top: -6px;
+  top: calc(-6px * var(--marker-zoom, var(--map-zoom, 1)));
   width: 2px;
-  height: 24px;
+  height: calc(24px * var(--marker-zoom, var(--map-zoom, 1)));
   transform: translateX(-50%);
 }
 
 .pin i::after {
-  left: -6px;
+  left: calc(-6px * var(--marker-zoom, var(--map-zoom, 1)));
   top: 50%;
-  width: 24px;
+  width: calc(24px * var(--marker-zoom, var(--map-zoom, 1)));
   height: 2px;
   transform: translateY(-50%);
 }
@@ -318,15 +367,22 @@ textarea {
 }
 
 .pin b {
-  display: inline-block;
-  min-width: 34px;
-  padding: 3px 6px;
+  display: inline-grid;
+  gap: 1px;
+  min-width: calc(34px * var(--marker-zoom, var(--map-zoom, 1)));
+  padding: calc(3px * var(--marker-zoom, var(--map-zoom, 1))) calc(6px * var(--marker-zoom, var(--map-zoom, 1)));
   border: 2px solid #fff;
   border-radius: 4px;
   background: var(--accent);
   color: #fff;
   text-shadow: none;
   box-shadow: 0 0 0 1px #111;
+}
+
+.pin b span:first-child,
+.report-pin b span:first-child {
+  font-size: 0.85em;
+  opacity: 0.9;
 }
 
 .map-tools {
@@ -481,29 +537,52 @@ textarea {
   overflow: hidden;
 }
 
-.report-map img {
+.report-map-layer {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-origin: center center;
+}
+
+.report-map img,
+.report-map-layer .map-placeholder {
   width: 100%;
   height: 100%;
   object-fit: contain;
+}
+
+.report-label-image {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
 }
 
 .report-pin {
   position: absolute;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  transform: translate(-6px, -6px);
+  gap: calc(6px * var(--marker-zoom, var(--map-zoom, 1)));
+  transform: translate(calc(-6px * var(--marker-zoom, var(--map-zoom, 1))), calc(-6px * var(--marker-zoom, var(--map-zoom, 1))));
   color: #111;
-  font-size: 10px;
+  font-size: calc(10px * var(--marker-zoom, var(--map-zoom, 1)));
   font-weight: 800;
   text-shadow: 0 1px 2px #fff, 0 -1px 2px #fff, 1px 0 2px #fff, -1px 0 2px #fff;
+}
+
+.report-pipe-bearing {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: calc(3px * var(--marker-zoom, var(--map-zoom, 1)));
+  background: #111;
+  transform-origin: bottom center;
 }
 
 .report-pin i {
   position: relative;
   flex: 0 0 auto;
-  width: 12px;
-  height: 12px;
+  width: calc(12px * var(--marker-zoom, var(--map-zoom, 1)));
+  height: calc(12px * var(--marker-zoom, var(--map-zoom, 1)));
   border: 1.5px solid #111;
   border-radius: 50%;
   background: #fff;
@@ -519,22 +598,23 @@ textarea {
 
 .report-pin i::before {
   left: 50%;
-  top: -5px;
+  top: calc(-5px * var(--marker-zoom, var(--map-zoom, 1)));
   width: 1.5px;
-  height: 20px;
+  height: calc(20px * var(--marker-zoom, var(--map-zoom, 1)));
   transform: translateX(-50%);
 }
 
 .report-pin i::after {
-  left: -5px;
+  left: calc(-5px * var(--marker-zoom, var(--map-zoom, 1)));
   top: 50%;
-  width: 20px;
+  width: calc(20px * var(--marker-zoom, var(--map-zoom, 1)));
   height: 1.5px;
   transform: translateY(-50%);
 }
 
 .report-pin b {
-  display: inline-block;
+  display: inline-grid;
+  gap: 1px;
   padding: 2px 4px;
   border: 1px solid #111;
   background: #fff;
@@ -880,6 +960,10 @@ textarea {
 
   .form-grid,
   .detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .project-switcher {
     grid-template-columns: 1fr;
   }
 

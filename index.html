@@ -26,7 +26,21 @@
           <h2 id="projectTitle">Project</h2>
           <span id="saveState" class="save-state">Saved</span>
         </div>
+        <div class="project-switcher">
+          <label>
+            Project file
+            <select id="projectSelect"></select>
+          </label>
+          <div class="inline-actions">
+            <button id="newProjectBtn" type="button">New</button>
+            <button id="deleteProjectBtn" class="danger" type="button">Delete</button>
+          </div>
+        </div>
         <div class="form-grid">
+          <label class="wide">
+            Project file name
+            <input id="projectFileName" autocomplete="off" placeholder="Gillespie-Test-Holes">
+          </label>
           <label>
             Project no.
             <input id="projectNumber" autocomplete="off" placeholder="2026085">
@@ -66,6 +80,13 @@
             Custom WKID
             <input id="customCoordinateSystem" inputmode="numeric" placeholder="e.g. 2236">
           </label>
+          <label>
+            Aerial style
+            <select id="mapStyle">
+              <option value="imagery">Imagery only</option>
+              <option value="hybrid">Hybrid labels</option>
+            </select>
+          </label>
           <label class="wide">
             Location
             <input id="location" autocomplete="off" placeholder="Street, subdivision, parcel, or station range">
@@ -94,6 +115,7 @@
         </div>
         <div id="mapCanvas" class="map-canvas" role="button" tabindex="0" aria-label="Aerial map">
           <img id="mapImage" alt="">
+          <img id="mapLabelImage" class="map-label-image" alt="">
           <div id="mapPlaceholder" class="map-placeholder">
             <strong>No aerial loaded</strong>
             <span>Use a screenshot, drone image, GIS export, or plan sheet crop.</span>
@@ -103,6 +125,9 @@
         <div class="map-tools">
           <button id="clearMapBtn" type="button">Clear Image</button>
           <button id="aerialFromCoordsBtn" type="button">Aerial From N/E</button>
+          <button id="zoomOutBtn" type="button">Zoom -</button>
+          <button id="zoomInBtn" type="button">Zoom +</button>
+          <button id="zoomResetBtn" type="button">Reset</button>
           <span id="mapTip">Selected TH: <b id="selectedHoleName">None</b></span>
         </div>
       </section>
@@ -136,6 +161,7 @@
               Expected utility
               <select id="expectedUtility">
                 <option>Water</option>
+                <option>Reclaimed Water</option>
                 <option>Sewer</option>
                 <option>Storm</option>
                 <option>Gas</option>
@@ -148,6 +174,7 @@
               Found utility
               <select id="utilityType">
                 <option>Water</option>
+                <option>Reclaimed Water</option>
                 <option>Sewer</option>
                 <option>Storm</option>
                 <option>Gas</option>
@@ -204,6 +231,18 @@
               Material
               <input id="material" autocomplete="off" placeholder="PVC, DIP, steel">
             </label>
+            <label>
+              Pipe bearing
+              <input id="pipeBearing" inputmode="decimal" placeholder="Approx. degrees">
+            </label>
+            <label>
+              Pipe end 1 length
+              <input id="pipeStartDistance" inputmode="decimal" placeholder="Map length">
+            </label>
+            <label>
+              Pipe end 2 length
+              <input id="pipeEndDistance" inputmode="decimal" placeholder="Map length">
+            </label>
             <label class="wide">
               Description
               <textarea id="description" rows="3" placeholder="Observed utility, offsets, condition, conflicts"></textarea>
@@ -218,6 +257,10 @@
             <label class="file-button">
               Add Photos
               <input id="photoInput" type="file" accept="image/*" capture="environment" multiple>
+            </label>
+            <label class="file-button">
+              Camera Roll
+              <input id="photoRollInput" type="file" accept="image/*" multiple>
             </label>
             <button id="clearPhotosBtn" type="button">Clear Photos</button>
           </div>
@@ -235,6 +278,7 @@
           <button id="geoJsonBtn" type="button">GeoJSON</button>
           <button id="openProjectMapBtn" type="button">Open Map</button>
           <button id="emailPdfBtn" type="button">Email PDF</button>
+          <button id="exportProjectBtn" type="button">Export Project</button>
           <button id="jsonBtn" type="button">Backup</button>
           <label class="file-button">
             Restore

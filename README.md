@@ -20,6 +20,7 @@ Open `http://127.0.0.1:4173`.
 - Use the phone camera/photo picker to attach photos.
 - Print the deliverable preview to PDF.
 - Export CSV for spreadsheets, GeoJSON for GIS/mapping tools, or JSON for app backup/restore.
+- Export a `.thproject.json` project file for local job folders and office editing.
 
 ## Map Piggyback Options
 
@@ -33,3 +34,7 @@ Open `http://127.0.0.1:4173`.
 Set the project coordinate system before using `Aerial From N/E`. Common options are included for Florida State Plane NAD83 US feet, WGS84 lat/long, and Web Mercator. If the project uses another system, enter its EPSG/WKID in `Custom WKID`.
 
 The app sends the selected hole's easting/northing to ArcGIS GeometryServer, converts it to lat/long, and centers an Esri World Imagery aerial on that point.
+
+## Project Files
+
+Use `Export Project` to save the current project as a `.thproject.json` file. That file can be kept in a local project folder and restored later with `Restore` for office edits. Projects are still stored locally per device/browser unless a cloud database is added later.
