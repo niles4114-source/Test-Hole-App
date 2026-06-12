@@ -142,7 +142,7 @@ function blankHole(index = state.holes.length + 1) {
     depthTop: "",
     utilitySize: "",
     material: "",
-    pipeColor: "#9c4f2f",
+    pipeColor: "Blue",
     pipeBearing: "",
     pipeStartDistance: "",
     pipeEndDistance: "",
@@ -184,7 +184,7 @@ function normalizeProjectData(data) {
   normalized.holes.forEach((hole) => {
     if (!Object.hasOwn(hole, "expectedUtility")) hole.expectedUtility = hole.utilityType || "Water";
     if (!Object.hasOwn(hole, "topPipeElevation")) hole.topPipeElevation = "";
-    if (!Object.hasOwn(hole, "pipeColor")) hole.pipeColor = "#9c4f2f";
+    if (!Object.hasOwn(hole, "pipeColor")) hole.pipeColor = "Blue";
     if (!Object.hasOwn(hole, "pipeBearing")) hole.pipeBearing = "";
     if (!Object.hasOwn(hole, "pipeStartDistance")) hole.pipeStartDistance = hole.pipeDistance || "";
     if (!Object.hasOwn(hole, "pipeEndDistance")) hole.pipeEndDistance = hole.pipeDistance || "";
@@ -540,9 +540,85 @@ function mapPointLabel(hole) {
   return `<b><span>${escapeHtml(hole.holeName || "TH")}</span><span>${escapeHtml(mapUtilityLabel(hole))}</span></b>`;
 }
 
+
+function pipeColorLabel(hole) {
+  const raw = String(hole.pipeColor || "").trim();
+  if (!raw) return "";
+  const lower = raw.toLowerCase();
+
+  const hexNames = {
+    "#0042a9": "Blue",
+    "#0066cc": "Blue",
+    "#0000ff": "Blue",
+    "#ff0000": "Red",
+    "#00a651": "Green",
+    "#008000": "Green",
+    "#ffff00": "Yellow",
+    "#f6c400": "Yellow",
+    "#ff8800": "Orange",
+    "#ffa500": "Orange",
+    "#800080": "Purple",
+    "#8a2be2": "Purple",
+    "#000000": "Black",
+    "#ffffff": "White",
+    "#808080": "Gray",
+    "#9c4f2f": "Brown"
+  };
+
+  if (hexNames[lower]) return hexNames[lower];
+  if (/^#[0-9a-f]{6}$/i.test(raw)) return raw.toUpperCase();
+
+  return raw.charAt(0).toUpperCase() + raw.slice(1);
+}
+
 function pipeColorValue(hole) {
-  const color = String(hole.pipeColor || "").trim();
-  return /^#[0-9a-fA-F]{6}$/.test(color) ? color : "#9c4f2f";
+  const raw = String(hole.pipeColor || "").trim();
+  const lower = raw.toLowerCase();
+
+  const colorMap = {
+    blue: "#0066cc",
+    water: "#0066cc",
+    red: "#ff0000",
+    electric: "#ff0000",
+    green: "#00a651",
+    sewer: "#00a651",
+    storm: "#00a651",
+    yellow: "#f6c400",
+    gas: "#f6c400",
+    orange: "#ff8800",
+    telecom: "#ff8800",
+    purple: "#8a2be2",
+    reclaimed: "#8a2be2",
+    black: "#000000",
+    white: "#ffffff",
+    gray: "#808080",
+    grey: "#808080",
+    brown: "#9c4f2f"
+  };
+
+  if (/^#[0-9a-fA-F]{6}$/.test(raw)) return raw;
+  return colorMap[lower] || "#9c4f2f";
+}
+
+function clampNumber(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function reportMapLayerStyle(hole, mapZoom) {
+  const zoom = Math.max(1, Number(mapZoom) || 1);
+  const widthPct = zoom * 100;
+  const heightPct = zoom * 100;
+
+  if (!Number.isFinite(hole.mapX) || !Number.isFinite(hole.mapY)) {
+    return `--map-zoom:1;width:${widthPct}%;height:${heightPct}%;left:0%;top:0%;`;
+  }
+
+  const minLeft = 100 - widthPct;
+  const minTop = 100 - heightPct;
+  const leftPct = clampNumber(50 - (hole.mapX * zoom), minLeft, 0);
+  const topPct = clampNumber(50 - (hole.mapY * zoom), minTop, 0);
+
+  return `--map-zoom:1;width:${widthPct}%;height:${heightPct}%;left:${leftPct}%;top:${topPct}%;`;
 }
 
 function pipeOverlay(hole, className, unit, labelZoom = 1) {
@@ -627,7 +703,7 @@ async function aerialFromCoordinates() {
   const bbox = [lng - delta, lat - delta, lng + delta, lat + delta].join(",");
   hole.mapImage = esriExportUrl("World_Imagery", bbox, false);
   hole.mapLabelImage = state.project.mapStyle === "hybrid" ? esriExportUrl("Reference/World_Boundaries_and_Places", bbox, true) : "";
-  hole.mapZoom = 1;
+  hole.mapZoom = 2;
   hole.mapX = 50;
   hole.mapY = 50;
   save();
@@ -737,7 +813,7 @@ function buildHoleDataSheet(hole, projectTitle, sheetNumber, totalSheets) {
         <div class="drawing-area first-page-map">
           <div class="north-arrow" aria-hidden="true">N</div>
           <div class="report-map">
-            <div class="report-map-layer" style="--map-zoom:1">
+            <div class="report-map-layer" style="${reportMapLayerStyle(hole, mapZoom)}">
               ${mapImage ? `<img src="${mapImage}" alt="">` : `<div class="map-placeholder"><strong>Aerial image / location map</strong><span>Generate or upload aerial for this test hole</span></div>`}
               ${mapLabelImage ? `<img class="report-label-image" src="${mapLabelImage}" alt="">` : ""}
               ${Number.isFinite(hole.mapX) && Number.isFinite(hole.mapY) ? `${reportPipeBearing(hole)}<span class="report-pin" style="left:${hole.mapX}%;top:${hole.mapY}%"><i></i>${mapPointLabel(hole)}</span>` : ""}
@@ -777,7 +853,7 @@ function holeDataRows(hole) {
     </tr>
     <tr>
       <th>Pipe Direction</th><td>${escapeHtml(pipeDirectionPair(hole))}</td>
-      <th>Pipe Color</th><td>${escapeHtml(hole.pipeColor || "")}</td>
+      <th>Pipe Color</th><td>${escapeHtml(pipeColorLabel(hole))}</td>
       <th></th><td></td>
     </tr>
     <tr>
@@ -932,7 +1008,7 @@ function exportGeoJson() {
           foundUtility: hole.utilityType,
           size: hole.utilitySize,
           material: hole.material,
-          pipeColor: hole.pipeColor,
+          pipeColor: pipeColorLabel(hole),
           groundElevation: hole.elevation,
           topPipeElevation: hole.topPipeElevation,
           depthTop: hole.depthTop,
