@@ -1186,8 +1186,8 @@ textarea {
 }
 
 .report-th-crosshair {
-  width: 40px !important;
-  height: 40px !important;
+  width: 32px !important;
+  height: 32px !important;
 }
 
 .th-crosshair svg,
@@ -1348,4 +1348,16 @@ input#pipeColor {
     height: 100% !important;
     overflow: hidden !important;
   }
+}
+
+
+/* PRINT VIEW CROSSHAIR FINAL OVERRIDE */
+.report-th-crosshair {
+  width: 32px !important;
+  height: 32px !important;
+}
+
+.report-th-crosshair circle,
+.report-th-crosshair line {
+  stroke-width: 4px !important;
 }
