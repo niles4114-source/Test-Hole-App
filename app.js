@@ -523,11 +523,19 @@ function renderPins() {
   const hole = selectedHole();
   const mapZoom = hole?.mapZoom || state.mapZoom || 1;
   const labelZoom = markerZoom(mapZoom);
+
   $("pinLayer").innerHTML = hole ? [hole]
     .filter((hole) => Number.isFinite(hole.mapX) && Number.isFinite(hole.mapY))
     .map((hole) => {
       const selected = hole.id === state.selectedId ? " selected" : "";
-      return `${pipeOverlay(hole, "pipe-bearing", "px", labelZoom)}<span class="pin${selected}" style="left:${hole.mapX}%;top:${hole.mapY}%;--marker-zoom:${labelZoom}"><i></i>${mapPointLabel(hole)}</span>`;
+      return `
+        <span class="pin-anchor" style="left:${hole.mapX}%;top:${hole.mapY}%;--marker-zoom:${labelZoom};--pipe-color:${pipeColorValue(hole)}">
+          ${pipeOverlay(hole, "pipe-bearing", "px", labelZoom, true)}
+          <span class="pin${selected}">
+            <i></i>${mapPointLabel(hole)}
+          </span>
+        </span>
+      `;
     })
     .join("") : "";
 }
@@ -540,98 +548,41 @@ function mapPointLabel(hole) {
   return `<b><span>${escapeHtml(hole.holeName || "TH")}</span><span>${escapeHtml(mapUtilityLabel(hole))}</span></b>`;
 }
 
-
-function pipeColorLabel(hole) {
-  const raw = String(hole.pipeColor || "").trim();
-  if (!raw) return "";
-  const lower = raw.toLowerCase();
-
-  const hexNames = {
-    "#0042a9": "Blue",
-    "#0066cc": "Blue",
-    "#0000ff": "Blue",
-    "#ff0000": "Red",
-    "#00a651": "Green",
-    "#008000": "Green",
-    "#ffff00": "Yellow",
-    "#f6c400": "Yellow",
-    "#ff8800": "Orange",
-    "#ffa500": "Orange",
-    "#800080": "Purple",
-    "#8a2be2": "Purple",
-    "#000000": "Black",
-    "#ffffff": "White",
-    "#808080": "Gray",
-    "#9c4f2f": "Brown"
-  };
-
-  if (hexNames[lower]) return hexNames[lower];
-  if (/^#[0-9a-f]{6}$/i.test(raw)) return raw.toUpperCase();
-
-  return raw.charAt(0).toUpperCase() + raw.slice(1);
-}
-
-function pipeColorValue(hole) {
-  const raw = String(hole.pipeColor || "").trim();
-  const lower = raw.toLowerCase();
-
-  const colorMap = {
-    blue: "#0066cc",
-    water: "#0066cc",
-    red: "#ff0000",
-    electric: "#ff0000",
-    green: "#00a651",
-    sewer: "#00a651",
-    storm: "#00a651",
-    yellow: "#f6c400",
-    gas: "#f6c400",
-    orange: "#ff8800",
-    telecom: "#ff8800",
-    purple: "#8a2be2",
-    reclaimed: "#8a2be2",
-    black: "#000000",
-    white: "#ffffff",
-    gray: "#808080",
-    grey: "#808080",
-    brown: "#9c4f2f"
-  };
-
-  if (/^#[0-9a-fA-F]{6}$/.test(raw)) return raw;
-  return colorMap[lower] || "#9c4f2f";
-}
-
-function clampNumber(value, min, max) {
-  return Math.max(min, Math.min(max, value));
-}
-
-function reportMapLayerStyle(hole, mapZoom) {
-  const zoom = Math.max(1, Number(mapZoom) || 1);
-  const widthPct = zoom * 100;
-  const heightPct = zoom * 100;
-
-  if (!Number.isFinite(hole.mapX) || !Number.isFinite(hole.mapY)) {
-    return `--map-zoom:1;width:${widthPct}%;height:${heightPct}%;left:0%;top:0%;`;
-  }
-
-  const minLeft = 100 - widthPct;
-  const minTop = 100 - heightPct;
-  const leftPct = clampNumber(50 - (hole.mapX * zoom), minLeft, 0);
-  const topPct = clampNumber(50 - (hole.mapY * zoom), minTop, 0);
-
-  return `--map-zoom:1;width:${widthPct}%;height:${heightPct}%;left:${leftPct}%;top:${topPct}%;`;
-}
-
-function pipeOverlay(hole, className, unit, labelZoom = 1) {
+function pipeOverlay(hole, className, unit, labelZoom = 1, anchored = false) {
   const bearing = normalizeBearing(hole.pipeBearing);
   if (bearing === null) return "";
+
   const fallback = unit === "in" ? 0.8 : 95;
   const start = pipeDisplayDistance(hole.pipeStartDistance, fallback, unit);
   const end = pipeDisplayDistance(hole.pipeEndDistance, fallback, unit);
-  const originClass = className === "report-pipe-bearing" ? "report-pipe-origin" : "pipe-origin";
+
+  const scale = unit === "in" ? 96 : 1;
+  const startPx = start * scale;
+  const endPx = end * scale;
+
+  const rad = bearing * Math.PI / 180;
+  const dx = Math.sin(rad);
+  const dy = -Math.cos(rad);
+
+  const center = 500;
+  const x1 = center - dx * startPx;
+  const y1 = center - dy * startPx;
+  const x2 = center + dx * endPx;
+  const y2 = center + dy * endPx;
+
+  const isReport = className === "report-pipe-bearing";
+  const vectorClass = isReport ? "report-pipe-vector" : "pipe-vector";
+  const lineClass = isReport ? "report-pipe-vector-line" : "pipe-vector-line";
+
+  const positionStyle = anchored
+    ? `left:0;top:0;--marker-zoom:${labelZoom};--pipe-color:${pipeColorValue(hole)}`
+    : `left:${hole.mapX}%;top:${hole.mapY}%;--marker-zoom:${labelZoom};--pipe-color:${pipeColorValue(hole)}`;
+
   return `
-    <span class="${originClass}" style="left:${hole.mapX}%;top:${hole.mapY}%;--marker-zoom:${labelZoom};--pipe-color:${pipeColorValue(hole)};transform: translate(-50%, -50%) rotate(${bearing}deg)">
-      <span class="${className} pipe-arm-start" style="height:${start}${unit}"></span>
-      <span class="${className} pipe-arm-end" style="height:${end}${unit}"></span>
+    <span class="${vectorClass}" style="${positionStyle}">
+      <svg viewBox="0 0 1000 1000" aria-hidden="true" focusable="false">
+        <line class="${lineClass}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"></line>
+      </svg>
     </span>
   `;
 }
@@ -816,7 +767,7 @@ function buildHoleDataSheet(hole, projectTitle, sheetNumber, totalSheets) {
             <div class="report-map-layer" style="${reportMapLayerStyle(hole, mapZoom)}">
               ${mapImage ? `<img src="${mapImage}" alt="">` : `<div class="map-placeholder"><strong>Aerial image / location map</strong><span>Generate or upload aerial for this test hole</span></div>`}
               ${mapLabelImage ? `<img class="report-label-image" src="${mapLabelImage}" alt="">` : ""}
-              ${Number.isFinite(hole.mapX) && Number.isFinite(hole.mapY) ? `${reportPipeBearing(hole)}<span class="report-pin" style="left:${hole.mapX}%;top:${hole.mapY}%"><i></i>${mapPointLabel(hole)}</span>` : ""}
+              ${Number.isFinite(hole.mapX) && Number.isFinite(hole.mapY) ? `<span class="report-pin-anchor" style="left:${hole.mapX}%;top:${hole.mapY}%;--pipe-color:${pipeColorValue(hole)}">${pipeOverlay(hole, "report-pipe-bearing", "in", 1, true)}<span class="report-pin"><i></i>${mapPointLabel(hole)}</span></span>` : ""}
             </div>
           </div>
         </div>
@@ -867,6 +818,87 @@ function holeDataRows(hole) {
 
 function reportPipeBearing(hole) {
   return pipeOverlay(hole, "report-pipe-bearing", "in", 1);
+}
+
+
+function pipeColorLabel(hole) {
+  const raw = String(hole.pipeColor || "").trim();
+  if (!raw) return "";
+  const lower = raw.toLowerCase();
+
+  const hexNames = {
+    "#0042a9": "Blue",
+    "#0066cc": "Blue",
+    "#0000ff": "Blue",
+    "#ff0000": "Red",
+    "#00a651": "Green",
+    "#008000": "Green",
+    "#ffff00": "Yellow",
+    "#f6c400": "Yellow",
+    "#ff8800": "Orange",
+    "#ffa500": "Orange",
+    "#800080": "Purple",
+    "#8a2be2": "Purple",
+    "#000000": "Black",
+    "#ffffff": "White",
+    "#808080": "Gray",
+    "#9c4f2f": "Brown"
+  };
+
+  if (hexNames[lower]) return hexNames[lower];
+  if (/^#[0-9a-f]{6}$/i.test(raw)) return raw.toUpperCase();
+
+  return raw.charAt(0).toUpperCase() + raw.slice(1);
+}
+
+function pipeColorValue(hole) {
+  const raw = String(hole.pipeColor || "").trim();
+  const lower = raw.toLowerCase();
+
+  const colorMap = {
+    blue: "#0066cc",
+    water: "#0066cc",
+    red: "#ff0000",
+    electric: "#ff0000",
+    green: "#00a651",
+    sewer: "#00a651",
+    storm: "#00a651",
+    yellow: "#f6c400",
+    gas: "#f6c400",
+    orange: "#ff8800",
+    telecom: "#ff8800",
+    purple: "#8a2be2",
+    reclaimed: "#8a2be2",
+    black: "#000000",
+    white: "#ffffff",
+    gray: "#808080",
+    grey: "#808080",
+    brown: "#9c4f2f"
+  };
+
+  if (/^#[0-9a-fA-F]{6}$/.test(raw)) return raw;
+  return colorMap[lower] || "#9c4f2f";
+}
+
+function clampNumber(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function reportMapLayerStyle(hole, mapZoom) {
+  const zoom = Math.max(1, Number(mapZoom) || 1);
+  const widthPct = zoom * 100;
+  const heightPct = zoom * 100;
+
+  if (!Number.isFinite(hole.mapX) || !Number.isFinite(hole.mapY)) {
+    return `--map-zoom:1;width:${widthPct}%;height:${heightPct}%;left:0%;top:0%;`;
+  }
+
+  const minLeft = 100 - widthPct;
+  const minTop = 100 - heightPct;
+  const leftPct = clampNumber(50 - (hole.mapX * zoom), minLeft, 0);
+  const topPct = clampNumber(50 - (hole.mapY * zoom), minTop, 0);
+
+  return `--map-zoom:1;width:${widthPct}%;height:${heightPct}%;left:${leftPct}%;top:${topPct}%;`;
 }
 
 function pipeDisplayDistance(value, fallback, unit = "px") {
