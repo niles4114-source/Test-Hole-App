@@ -31,6 +31,7 @@ const holeFields = [
   "depthTop",
   "utilitySize",
   "material",
+  "pipeColor",
   "pipeBearing",
   "pipeStartDistance",
   "pipeEndDistance",
@@ -141,6 +142,7 @@ function blankHole(index = state.holes.length + 1) {
     depthTop: "",
     utilitySize: "",
     material: "",
+    pipeColor: "#9c4f2f",
     pipeBearing: "",
     pipeStartDistance: "",
     pipeEndDistance: "",
@@ -182,6 +184,7 @@ function normalizeProjectData(data) {
   normalized.holes.forEach((hole) => {
     if (!Object.hasOwn(hole, "expectedUtility")) hole.expectedUtility = hole.utilityType || "Water";
     if (!Object.hasOwn(hole, "topPipeElevation")) hole.topPipeElevation = "";
+    if (!Object.hasOwn(hole, "pipeColor")) hole.pipeColor = "#9c4f2f";
     if (!Object.hasOwn(hole, "pipeBearing")) hole.pipeBearing = "";
     if (!Object.hasOwn(hole, "pipeStartDistance")) hole.pipeStartDistance = hole.pipeDistance || "";
     if (!Object.hasOwn(hole, "pipeEndDistance")) hole.pipeEndDistance = hole.pipeDistance || "";
@@ -537,6 +540,11 @@ function mapPointLabel(hole) {
   return `<b><span>${escapeHtml(hole.holeName || "TH")}</span><span>${escapeHtml(mapUtilityLabel(hole))}</span></b>`;
 }
 
+function pipeColorValue(hole) {
+  const color = String(hole.pipeColor || "").trim();
+  return /^#[0-9a-fA-F]{6}$/.test(color) ? color : "#9c4f2f";
+}
+
 function pipeOverlay(hole, className, unit, labelZoom = 1) {
   const bearing = normalizeBearing(hole.pipeBearing);
   if (bearing === null) return "";
@@ -545,7 +553,7 @@ function pipeOverlay(hole, className, unit, labelZoom = 1) {
   const end = pipeDisplayDistance(hole.pipeEndDistance, fallback, unit);
   const originClass = className === "report-pipe-bearing" ? "report-pipe-origin" : "pipe-origin";
   return `
-    <span class="${originClass}" style="left:${hole.mapX}%;top:${hole.mapY}%;--marker-zoom:${labelZoom};transform: translate(-50%, -50%) rotate(${bearing}deg)">
+    <span class="${originClass}" style="left:${hole.mapX}%;top:${hole.mapY}%;--marker-zoom:${labelZoom};--pipe-color:${pipeColorValue(hole)};transform: translate(-50%, -50%) rotate(${bearing}deg)">
       <span class="${className} pipe-arm-start" style="height:${start}${unit}"></span>
       <span class="${className} pipe-arm-end" style="height:${end}${unit}"></span>
     </span>
@@ -729,7 +737,7 @@ function buildHoleDataSheet(hole, projectTitle, sheetNumber, totalSheets) {
         <div class="drawing-area first-page-map">
           <div class="north-arrow" aria-hidden="true">N</div>
           <div class="report-map">
-            <div class="report-map-layer" style="--map-zoom:${markerZoom(mapZoom)};transform: scale(${mapZoom})">
+            <div class="report-map-layer" style="--map-zoom:1">
               ${mapImage ? `<img src="${mapImage}" alt="">` : `<div class="map-placeholder"><strong>Aerial image / location map</strong><span>Generate or upload aerial for this test hole</span></div>`}
               ${mapLabelImage ? `<img class="report-label-image" src="${mapLabelImage}" alt="">` : ""}
               ${Number.isFinite(hole.mapX) && Number.isFinite(hole.mapY) ? `${reportPipeBearing(hole)}<span class="report-pin" style="left:${hole.mapX}%;top:${hole.mapY}%"><i></i>${mapPointLabel(hole)}</span>` : ""}
@@ -769,7 +777,7 @@ function holeDataRows(hole) {
     </tr>
     <tr>
       <th>Pipe Direction</th><td>${escapeHtml(pipeDirectionPair(hole))}</td>
-      <th></th><td></td>
+      <th>Pipe Color</th><td>${escapeHtml(hole.pipeColor || "")}</td>
       <th></th><td></td>
     </tr>
     <tr>
@@ -782,7 +790,7 @@ function holeDataRows(hole) {
 }
 
 function reportPipeBearing(hole) {
-  return pipeOverlay(hole, "report-pipe-bearing", "in", markerZoom(hole.mapZoom || state.mapZoom || 1));
+  return pipeOverlay(hole, "report-pipe-bearing", "in", 1);
 }
 
 function pipeDisplayDistance(value, fallback, unit = "px") {
@@ -856,6 +864,7 @@ function exportCsv() {
     "depthTop",
     "utilitySize",
     "material",
+    "pipeColor",
     "description",
     "holeNotes",
     "mapX",
@@ -923,6 +932,7 @@ function exportGeoJson() {
           foundUtility: hole.utilityType,
           size: hole.utilitySize,
           material: hole.material,
+          pipeColor: hole.pipeColor,
           groundElevation: hole.elevation,
           topPipeElevation: hole.topPipeElevation,
           depthTop: hole.depthTop,
