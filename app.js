@@ -407,28 +407,41 @@ function renderMapImage() {
   const labelImage = $("mapLabelImage");
   const pinLayer = $("pinLayer");
 
-  // Keep the image, labels, pins, pipe, and crosshair on the exact same scaled layer.
-  // This makes the test hole symbol and pipe scale with the map instead of drifting.
-  canvas.style.setProperty("--map-zoom", mapZoom);
+  canvas.style.setProperty("--map-zoom", markerZoom(mapZoom));
   image.src = mapImage;
   labelImage.src = mapLabelImage;
-  image.style.transform = `scale(${mapZoom})`;
-  labelImage.style.transform = `scale(${mapZoom})`;
-  pinLayer.style.transform = `scale(${mapZoom})`;
+
+  [image, labelImage, pinLayer].forEach((layer) => {
+    layer.style.transformOrigin = "50% 50%";
+    layer.style.transform = `scale(${mapZoom})`;
+  });
+
   canvas.classList.toggle("has-image", Boolean(mapImage));
   canvas.classList.toggle("has-labels", Boolean(mapLabelImage));
 }
 
 function setMapZoom(nextZoom) {
   const hole = selectedHole();
+  const canvas = $("mapCanvas");
+  const previousZoom = hole?.mapZoom || state.mapZoom || 1;
   const zoom = Math.max(1, Math.min(4, Number(nextZoom.toFixed(2))));
+
+  const centerX = canvas.scrollLeft + canvas.clientWidth / 2;
+  const centerY = canvas.scrollTop + canvas.clientHeight / 2;
+  const ratio = zoom / previousZoom;
+
   if (hole) {
     hole.mapZoom = zoom;
   } else {
     state.mapZoom = zoom;
   }
+
   save();
   renderMapImage();
+
+  canvas.scrollLeft = centerX * ratio - canvas.clientWidth / 2;
+  canvas.scrollTop = centerY * ratio - canvas.clientHeight / 2;
+
   renderReport();
 }
 
@@ -493,9 +506,8 @@ function renderPhotos(hole) {
 
 function renderPins() {
   const hole = selectedHole();
-  // The whole pinLayer is scaled with the map, so marker zoom should stay 1.
-  // This keeps the pipe center, crosshair center, and test hole point matched.
-  const labelZoom = 1;
+  const mapZoom = hole?.mapZoom || state.mapZoom || 1;
+  const labelZoom = markerZoom(mapZoom);
   $("pinLayer").innerHTML = hole ? [hole]
     .filter((hole) => Number.isFinite(hole.mapX) && Number.isFinite(hole.mapY))
     .map((hole) => {
@@ -526,29 +538,6 @@ function pipeOverlay(hole, className, unit, labelZoom = 1) {
       <span class="${className} pipe-arm-end" style="height:${end}${unit}"></span>
     </span>
   `;
-}
-
-
-function placeSelectedHoleOnMap(event) {
-  const hole = selectedHole();
-  if (!hole) return;
-  if (event.target.closest("button") || event.target.closest(".pin")) return;
-
-  const canvas = $("mapCanvas");
-  const rect = canvas.getBoundingClientRect();
-  const zoom = hole.mapZoom || state.mapZoom || 1;
-
-  // Because the map image, label image, and pin layer all scale from top-left,
-  // divide the click position by the same zoom to store the true map percent.
-  const x = ((event.clientX - rect.left) / zoom / rect.width) * 100;
-  const y = ((event.clientY - rect.top) / zoom / rect.height) * 100;
-
-  hole.mapX = Math.max(0, Math.min(100, x));
-  hole.mapY = Math.max(0, Math.min(100, y));
-
-  save();
-  renderPins();
-  renderReport();
 }
 
 function projectCoordinateWkid() {
@@ -731,7 +720,7 @@ function buildHoleDataSheet(hole, projectTitle, sheetNumber, totalSheets) {
             <div class="report-map-layer" style="--map-zoom:${markerZoom(mapZoom)};transform: scale(${mapZoom})">
               ${mapImage ? `<img src="${mapImage}" alt="">` : `<div class="map-placeholder"><strong>Aerial image / location map</strong><span>Generate or upload aerial for this test hole</span></div>`}
               ${mapLabelImage ? `<img class="report-label-image" src="${mapLabelImage}" alt="">` : ""}
-              ${Number.isFinite(hole.mapX) && Number.isFinite(hole.mapY) ? `${reportPipeBearing(hole)}<span class="report-pin" style="left:${hole.mapX}%;top:${hole.mapY}%;--marker-zoom:1"><i></i>${mapPointLabel(hole)}</span>` : ""}
+              ${Number.isFinite(hole.mapX) && Number.isFinite(hole.mapY) ? `${reportPipeBearing(hole)}<span class="report-pin" style="left:${hole.mapX}%;top:${hole.mapY}%"><i></i>${mapPointLabel(hole)}</span>` : ""}
             </div>
           </div>
         </div>
@@ -781,7 +770,7 @@ function holeDataRows(hole) {
 }
 
 function reportPipeBearing(hole) {
-  return pipeOverlay(hole, "report-pipe-bearing", "in", 1);
+  return pipeOverlay(hole, "report-pipe-bearing", "in", markerZoom(hole.mapZoom || state.mapZoom || 1));
 }
 
 function pipeDisplayDistance(value, fallback, unit = "px") {
@@ -1008,7 +997,6 @@ function bindEvents() {
   $("addHoleBtn").addEventListener("click", () => addHole());
   $("duplicateHoleBtn").addEventListener("click", duplicateHole);
   $("deleteHoleBtn").addEventListener("click", deleteHole);
-  $("mapCanvas").addEventListener("click", placeSelectedHoleOnMap);
   $("mapImage").addEventListener("error", () => {
     $("mapTip").textContent = "Aerial image failed to load. Check the coordinate system and internet connection.";
   });
@@ -1044,7 +1032,7 @@ function bindEvents() {
   $("refreshReportBtn").addEventListener("click", renderReport);
   $("printBtn").addEventListener("click", () => {
     renderReport();
-    setTimeout(() => window.print(), 100);
+    window.print();
   });
   $("csvBtn").addEventListener("click", exportCsv);
   $("geoJsonBtn").addEventListener("click", exportGeoJson);

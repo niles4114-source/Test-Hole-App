@@ -977,68 +977,36 @@ textarea {
   }
 }
 
+@media print {
+  body {
+    background: #fff;
+  }
+
+  .topbar,
+  .app-shell {
+    display: none;
+  }
+
+  .print-report {
+    display: block;
+  }
+
+  .sheet {
+    width: 8.5in;
+    min-height: 10.5in;
+    margin: 0;
+    border: 0;
+    box-shadow: none;
+    page-break-after: always;
+  }
+}
 
 
-/* Alignment + zoom fix: image, pipe, center point, and TH crosshair share one top-left scaled layer. */
+/* CHATGPT PATCH: centered zoom + true 2-page printing */
 .map-canvas img,
 .pin-layer,
 .report-map-layer {
-  transform-origin: top left !important;
-}
-
-.pin-layer {
-  overflow: visible;
-}
-
-.pipe-origin,
-.report-pipe-origin {
-  z-index: 2;
-  pointer-events: none;
-}
-
-.pin {
-  width: 0;
-  height: 0;
-  transform: translate(-50%, -50%);
-  overflow: visible;
-  z-index: 3;
-}
-
-.pin i {
-  position: absolute;
-  left: 0;
-  top: 0;
-  transform: translate(-50%, -50%);
-}
-
-.pin b {
-  position: absolute;
-  left: calc(14px * var(--marker-zoom, 1));
-  top: 0;
-  transform: translateY(-50%);
-}
-
-.report-pin {
-  width: 0;
-  height: 0;
-  transform: translate(-50%, -50%);
-  overflow: visible;
-  z-index: 3;
-}
-
-.report-pin i {
-  position: absolute;
-  left: 0;
-  top: 0;
-  transform: translate(-50%, -50%);
-}
-
-.report-pin b {
-  position: absolute;
-  left: calc(11px * var(--marker-zoom, 1));
-  top: 0;
-  transform: translateY(-50%);
-  white-space: nowrap;
+  transform-origin: 50% 50% !important;
 }
 
 @page {
@@ -1047,79 +1015,33 @@ textarea {
 }
 
 @media print {
-  html,
-  body {
-    width: 8.5in;
-    min-height: 11in;
-    margin: 0 !important;
-    padding: 0 !important;
-    background: #fff !important;
-    overflow: visible !important;
-  }
-
-  body * {
-    visibility: hidden !important;
-  }
-
-  #printReport,
-  #printReport * {
-    visibility: visible !important;
-  }
-
-  .topbar,
-  .app-shell {
-    display: none !important;
-  }
-
-  #printReport,
-  .print-report {
-    display: block !important;
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 8.5in;
-    margin: 0 !important;
-    padding: 0 !important;
-    background: #fff !important;
-  }
-
   .sheet {
-    display: block !important;
     width: 8.5in !important;
     height: 11in !important;
-    min-height: 11in !important;
+    min-height: 0 !important;
     margin: 0 !important;
-    padding: 0.18in !important;
-    border: 0 !important;
-    box-shadow: none !important;
     box-sizing: border-box !important;
-    page-break-after: always;
-    break-after: page;
     overflow: hidden !important;
+    page-break-after: always !important;
   }
 
   .sheet-frame {
-    width: 100% !important;
-    height: 10.64in !important;
-    min-height: 10.64in !important;
-    box-sizing: border-box !important;
+    min-height: 0 !important;
+    height: 100% !important;
     overflow: hidden !important;
+  }
+
+  .first-page-frame {
+    grid-template-rows: auto auto auto minmax(0,1fr) auto !important;
+  }
+
+  .photo-page-frame {
+    grid-template-rows: auto auto minmax(0,1fr) !important;
   }
 
   .drawing-area,
   .report-map,
-  .report-map-layer {
-    max-width: 100% !important;
-    overflow: hidden !important;
-  }
-
-  .report-map-layer,
-  .report-pin,
-  .report-pipe-origin,
-  .report-pipe-bearing,
-  .report-pin i,
-  .report-pin b {
-    print-color-adjust: exact;
-    -webkit-print-color-adjust: exact;
+  .first-page-map {
+    min-height: 0 !important;
   }
 }
