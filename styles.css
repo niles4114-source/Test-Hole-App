@@ -1001,47 +1001,100 @@ textarea {
   }
 }
 
-
-/* CHATGPT PATCH: centered zoom + true 2-page printing */
-.map-canvas img,
-.pin-layer,
-.report-map-layer {
-  transform-origin: 50% 50% !important;
+/* PATCH: marker-centered zoom */
+.map-canvas {
+  overflow: auto !important;
 }
 
+.map-canvas img,
+.pin-layer {
+  position: absolute !important;
+  left: 0 !important;
+  top: 0 !important;
+  right: auto !important;
+  bottom: auto !important;
+  transform: none !important;
+  transform-origin: 0 0 !important;
+  max-width: none !important;
+}
+
+.map-canvas img {
+  object-fit: contain !important;
+}
+
+.pin-layer {
+  pointer-events: none;
+}
+
+/* PATCH: true two-page letter printing */
 @page {
   size: Letter portrait;
   margin: 0;
 }
 
 @media print {
+  html,
+  body {
+    width: 8.5in !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #fff !important;
+  }
+
+  .topbar,
+  .app-shell,
+  .report-preview {
+    display: none !important;
+  }
+
+  .print-report {
+    display: block !important;
+    width: 8.5in !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
   .sheet {
     width: 8.5in !important;
     height: 11in !important;
     min-height: 0 !important;
     margin: 0 !important;
+    padding: 0.10in !important;
+    border: 0 !important;
+    box-shadow: none !important;
     box-sizing: border-box !important;
     overflow: hidden !important;
+    break-after: page !important;
     page-break-after: always !important;
   }
 
+  .print-report .sheet:last-child {
+    break-after: auto !important;
+    page-break-after: auto !important;
+  }
+
   .sheet-frame {
+    height: 10.80in !important;
     min-height: 0 !important;
-    height: 100% !important;
+    box-sizing: border-box !important;
     overflow: hidden !important;
+    padding: 0.08in !important;
+    gap: 0.055in !important;
   }
 
   .first-page-frame {
-    grid-template-rows: auto auto auto minmax(0,1fr) auto !important;
+    grid-template-rows: auto auto auto minmax(0, 1fr) auto !important;
   }
 
   .photo-page-frame {
-    grid-template-rows: auto auto minmax(0,1fr) !important;
+    grid-template-rows: auto auto minmax(0, 1fr) !important;
   }
 
   .drawing-area,
-  .report-map,
-  .first-page-map {
+  .first-page-map,
+  .report-map {
     min-height: 0 !important;
+    height: 100% !important;
+    overflow: hidden !important;
   }
 }

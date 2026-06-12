@@ -406,44 +406,56 @@ function renderMapImage() {
   const image = $("mapImage");
   const labelImage = $("mapLabelImage");
   const pinLayer = $("pinLayer");
+  const zoomPercent = `${mapZoom * 100}%`;
 
   canvas.style.setProperty("--map-zoom", markerZoom(mapZoom));
   image.src = mapImage;
   labelImage.src = mapLabelImage;
 
   [image, labelImage, pinLayer].forEach((layer) => {
-    layer.style.transformOrigin = "50% 50%";
-    layer.style.transform = `scale(${mapZoom})`;
+    layer.style.transform = "none";
+    layer.style.transformOrigin = "0 0";
+    layer.style.left = "0";
+    layer.style.top = "0";
+    layer.style.right = "auto";
+    layer.style.bottom = "auto";
+    layer.style.width = zoomPercent;
+    layer.style.height = zoomPercent;
   });
 
   canvas.classList.toggle("has-image", Boolean(mapImage));
   canvas.classList.toggle("has-labels", Boolean(mapLabelImage));
+  requestAnimationFrame(centerMapOnSelectedHole);
 }
 
 function setMapZoom(nextZoom) {
   const hole = selectedHole();
-  const canvas = $("mapCanvas");
-  const previousZoom = hole?.mapZoom || state.mapZoom || 1;
   const zoom = Math.max(1, Math.min(4, Number(nextZoom.toFixed(2))));
-
-  const centerX = canvas.scrollLeft + canvas.clientWidth / 2;
-  const centerY = canvas.scrollTop + canvas.clientHeight / 2;
-  const ratio = zoom / previousZoom;
-
   if (hole) {
     hole.mapZoom = zoom;
   } else {
     state.mapZoom = zoom;
   }
-
   save();
   renderMapImage();
-
-  canvas.scrollLeft = centerX * ratio - canvas.clientWidth / 2;
-  canvas.scrollTop = centerY * ratio - canvas.clientHeight / 2;
-
   renderReport();
 }
+function centerMapOnSelectedHole() {
+  const hole = selectedHole();
+  const canvas = $("mapCanvas");
+  if (!hole || !canvas) return;
+  if (!Number.isFinite(hole.mapX) || !Number.isFinite(hole.mapY)) return;
+
+  const mapZoom = hole.mapZoom || state.mapZoom || 1;
+  const contentWidth = canvas.clientWidth * mapZoom;
+  const contentHeight = canvas.clientHeight * mapZoom;
+  const targetX = (hole.mapX / 100) * contentWidth;
+  const targetY = (hole.mapY / 100) * contentHeight;
+
+  canvas.scrollLeft = Math.max(0, targetX - canvas.clientWidth / 2);
+  canvas.scrollTop = Math.max(0, targetY - canvas.clientHeight / 2);
+}
+
 
 function markerZoom(mapZoom) {
   return Math.max(0.75, Math.min(2.25, 0.75 + ((mapZoom || 1) - 1) * 0.5625));
