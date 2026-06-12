@@ -529,11 +529,16 @@ function renderPins() {
     .map((hole) => {
       const selected = hole.id === state.selectedId ? " selected" : "";
       return `
-        <span class="pin-anchor" style="left:${hole.mapX}%;top:${hole.mapY}%;--marker-zoom:${labelZoom};--pipe-color:${pipeColorValue(hole)}">
+        <span class="th-marker${selected}" style="left:${hole.mapX}%;top:${hole.mapY}%;--marker-zoom:${labelZoom};--pipe-color:${pipeColorValue(hole)}">
           ${pipeOverlay(hole, "pipe-bearing", "px", labelZoom, true)}
-          <span class="pin${selected}">
-            <i></i>${mapPointLabel(hole)}
+          <span class="th-crosshair" aria-hidden="true">
+            <svg viewBox="-50 -50 100 100" focusable="false">
+              <circle cx="0" cy="0" r="22"></circle>
+              <line x1="-36" y1="0" x2="36" y2="0"></line>
+              <line x1="0" y1="-36" x2="0" y2="36"></line>
+            </svg>
           </span>
+          <span class="th-label">${mapPointLabel(hole)}</span>
         </span>
       `;
     })
@@ -767,7 +772,7 @@ function buildHoleDataSheet(hole, projectTitle, sheetNumber, totalSheets) {
             <div class="report-map-layer" style="${reportMapLayerStyle(hole, mapZoom)}">
               ${mapImage ? `<img src="${mapImage}" alt="">` : `<div class="map-placeholder"><strong>Aerial image / location map</strong><span>Generate or upload aerial for this test hole</span></div>`}
               ${mapLabelImage ? `<img class="report-label-image" src="${mapLabelImage}" alt="">` : ""}
-              ${Number.isFinite(hole.mapX) && Number.isFinite(hole.mapY) ? `<span class="report-pin-anchor" style="left:${hole.mapX}%;top:${hole.mapY}%;--pipe-color:${pipeColorValue(hole)}">${pipeOverlay(hole, "report-pipe-bearing", "in", 1, true)}<span class="report-pin"><i></i>${mapPointLabel(hole)}</span></span>` : ""}
+              ${Number.isFinite(hole.mapX) && Number.isFinite(hole.mapY) ? `<span class="report-th-marker" style="left:${hole.mapX}%;top:${hole.mapY}%;--pipe-color:${pipeColorValue(hole)}">${pipeOverlay(hole, "report-pipe-bearing", "in", 1, true)}<span class="report-th-crosshair" aria-hidden="true"><svg viewBox="-50 -50 100 100" focusable="false"><circle cx="0" cy="0" r="18"></circle><line x1="-30" y1="0" x2="30" y2="0"></line><line x1="0" y1="-30" x2="0" y2="30"></line></svg></span><span class="report-th-label">${mapPointLabel(hole)}</span></span>` : ""}
             </div>
           </div>
         </div>

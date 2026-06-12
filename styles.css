@@ -1100,7 +1100,7 @@ textarea {
 }
 
 
-/* FINAL PATCH V4: SVG centered pipe, zoomed print map, pipe color */
+/* FINAL PATCH V6: pipe and crosshair are drawn from the exact same center */
 .map-canvas {
   overflow: auto !important;
 }
@@ -1122,11 +1122,22 @@ textarea {
   pointer-events: none;
 }
 
-/* New SVG pipe renderer.
-   The SVG center point is exactly the same mapX/mapY as the TH crosshair. */
+.th-marker,
+.report-th-marker {
+  position: absolute !important;
+  width: 0 !important;
+  height: 0 !important;
+  overflow: visible !important;
+  pointer-events: none !important;
+  z-index: 5;
+}
+
+/* Pipe center is exactly marker 0,0 */
 .pipe-vector,
 .report-pipe-vector {
   position: absolute !important;
+  left: 0 !important;
+  top: 0 !important;
   width: 1000px !important;
   height: 1000px !important;
   transform: translate(-50%, -50%) !important;
@@ -1156,9 +1167,91 @@ textarea {
   stroke-width: 3px !important;
 }
 
-.pin,
-.report-pin {
-  z-index: 2;
+/* Crosshair center is exactly marker 0,0 */
+.th-crosshair,
+.report-th-crosshair {
+  position: absolute !important;
+  left: 0 !important;
+  top: 0 !important;
+  transform: translate(-50%, -50%) !important;
+  transform-origin: center center !important;
+  z-index: 3 !important;
+  display: block !important;
+  pointer-events: none !important;
+}
+
+.th-crosshair {
+  width: calc(72px * var(--marker-zoom, var(--map-zoom, 1))) !important;
+  height: calc(72px * var(--marker-zoom, var(--map-zoom, 1))) !important;
+}
+
+.report-th-crosshair {
+  width: 60px !important;
+  height: 60px !important;
+}
+
+.th-crosshair svg,
+.report-th-crosshair svg {
+  width: 100% !important;
+  height: 100% !important;
+  overflow: visible !important;
+}
+
+.th-crosshair circle,
+.th-crosshair line,
+.report-th-crosshair circle,
+.report-th-crosshair line {
+  fill: none !important;
+  stroke: var(--accent, #1f4f47) !important;
+  stroke-width: 8px !important;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Label is offset from marker center. It no longer controls the crosshair. */
+.th-label,
+.report-th-label {
+  position: absolute !important;
+  left: calc(34px * var(--marker-zoom, var(--map-zoom, 1))) !important;
+  top: calc(-26px * var(--marker-zoom, var(--map-zoom, 1))) !important;
+  z-index: 4 !important;
+  pointer-events: none !important;
+}
+
+.report-th-label {
+  left: 26px !important;
+  top: -22px !important;
+}
+
+/* Reuse old label card style inside new label */
+.th-label b,
+.report-th-label b {
+  display: inline-grid;
+  gap: 1px;
+  min-width: calc(34px * var(--marker-zoom, var(--map-zoom, 1)));
+  padding: calc(3px * var(--marker-zoom, var(--map-zoom, 1))) calc(6px * var(--marker-zoom, var(--map-zoom, 1)));
+  border: 2px solid #fff;
+  border-radius: 4px;
+  background: var(--accent);
+  color: #fff;
+  text-shadow: none;
+  box-shadow: 0 0 0 1px #111;
+  font-size: calc(12px * var(--marker-zoom, var(--map-zoom, 1)));
+  font-weight: 800;
+}
+
+.report-th-label b {
+  border: 1px solid #111;
+  background: #fff;
+  color: #111;
+  box-shadow: none;
+  font-size: 10px;
+  padding: 2px 4px;
+}
+
+.th-label b span:first-child,
+.report-th-label b span:first-child {
+  font-size: 0.85em;
+  opacity: 0.9;
 }
 
 .report-map {
@@ -1255,45 +1348,4 @@ input#pipeColor {
     height: 100% !important;
     overflow: hidden !important;
   }
-}
-
-
-/* FINAL PATCH V5: pipe is anchored to the exact crosshair center */
-.pin-anchor,
-.report-pin-anchor {
-  position: absolute !important;
-  width: 0 !important;
-  height: 0 !important;
-  overflow: visible !important;
-  pointer-events: none !important;
-  z-index: 3;
-}
-
-.pin-anchor > .pin {
-  position: absolute !important;
-  left: 0 !important;
-  top: 0 !important;
-}
-
-.report-pin-anchor > .report-pin {
-  position: absolute !important;
-  left: 0 !important;
-  top: 0 !important;
-}
-
-.pin-anchor > .pipe-vector,
-.report-pin-anchor > .report-pipe-vector {
-  left: 0 !important;
-  top: 0 !important;
-}
-
-/* keep the crosshair above the pipe while sharing the same center */
-.pin-anchor .pin,
-.report-pin-anchor .report-pin {
-  z-index: 5 !important;
-}
-
-.pin-anchor .pipe-vector,
-.report-pin-anchor .report-pipe-vector {
-  z-index: 4 !important;
 }
