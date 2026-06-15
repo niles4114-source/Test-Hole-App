@@ -1,6 +1,8 @@
 const STORAGE_KEY = "test-hole-collector-v1";
 const PROJECT_INDEX_KEY = "test-hole-project-index-v1";
 const ACTIVE_PROJECT_KEY = "test-hole-active-project-v1";
+const PROJECT_DB_NAME = "test-hole-collector-projects-v1";
+const PROJECT_STORE = "projects";
 
 const fields = [
   "projectFileName",
@@ -24,17 +26,9 @@ const holeFields = [
   "utilityType",
   "surfaceType",
   "method",
-  "northing",
-  "easting",
   "elevation",
   "topPipeElevation",
   "depthTop",
-  "utilitySize",
-  "material",
-  "pipeColor",
-  "pipeBearing",
-  "pipeStartDistance",
-  "pipeEndDistance",
   "description",
   "holeNotes",
 ];
@@ -49,6 +43,37 @@ const state = {
 
 let projectRecords = [];
 let activeProjectId = null;
+let projectDbPromise;
+
+function openProjectDb() {
+  if (!projectDbPromise) {
+    projectDbPromise = new Promise((resolve, reject) => {
+      const request = indexedDB.open(PROJECT_DB_NAME, 1);
+      request.onupgradeneeded = () => {
+        if (!request.result.objectStoreNames.contains(PROJECT_STORE)) {
+          request.result.createObjectStore(PROJECT_STORE);
+        }
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+  return projectDbPromise;
+}
+
+async function projectDbRequest(mode, action) {
+  const db = await openProjectDb();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(PROJECT_STORE, mode);
+    const request = action(transaction.objectStore(PROJECT_STORE));
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+const readProjectData = (id) => projectDbRequest("readonly", (store) => store.get(id));
+const writeProjectData = (id, data) => projectDbRequest("readwrite", (store) => store.put(data, id));
+const removeProjectData = (id) => projectDbRequest("readwrite", (store) => store.delete(id));
 
 function defaultProject() {
   return {
@@ -69,17 +94,18 @@ function defaultProject() {
 }
 
 const $ = (id) => document.getElementById(id);
+const hasOwn = (object, property) => Object.prototype.hasOwnProperty.call(object, property);
 
 function uid() {
   return crypto.randomUUID ? crypto.randomUUID() : `id-${Date.now()}-${Math.random()}`;
 }
 
 function escapeHtml(value) {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
+  return String(value === null || value === undefined ? "" : value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 function selectedHole() {
@@ -121,10 +147,36 @@ function oppositeDirection(direction) {
   return index < 0 ? "" : directions[(index + 4) % 8];
 }
 
-function pipeDirectionPair(hole) {
-  const first = bearingDirection(hole.pipeBearing);
+function pipeDirectionPair(pipe) {
+  const first = bearingDirection(pipe.pipeBearing);
   if (!first) return "";
   return `${first}-${oppositeDirection(first)}`;
+}
+
+function blankPipe(source = {}) {
+  return {
+    id: source.id || uid(),
+    northing: source.northing || "",
+    easting: source.easting || "",
+    utilitySize: source.utilitySize || "",
+    material: source.material || "",
+    pipeColor: source.pipeColor || "Blue",
+    pipeBearing: source.pipeBearing || "",
+    pipeStartDistance: source.pipeStartDistance || source.pipeDistance || "",
+    pipeEndDistance: source.pipeEndDistance || source.pipeDistance || "",
+  };
+}
+
+function syncPrimaryPipeLegacy(hole) {
+  const pipe = (hole.pipes && hole.pipes[0]) || blankPipe();
+  hole.utilitySize = pipe.utilitySize;
+  hole.material = pipe.material;
+  hole.pipeColor = pipe.pipeColor;
+  hole.pipeBearing = pipe.pipeBearing;
+  hole.pipeStartDistance = pipe.pipeStartDistance;
+  hole.pipeEndDistance = pipe.pipeEndDistance;
+  hole.northing = pipe.northing;
+  hole.easting = pipe.easting;
 }
 
 function blankHole(index = state.holes.length + 1) {
@@ -146,6 +198,7 @@ function blankHole(index = state.holes.length + 1) {
     pipeBearing: "",
     pipeStartDistance: "",
     pipeEndDistance: "",
+    pipes: [blankPipe()],
     description: "",
     holeNotes: "",
     mapX: null,
@@ -182,18 +235,26 @@ function normalizeProjectData(data) {
   normalized.holes = Array.isArray(normalized.holes) ? normalized.holes : [];
   if (!normalized.holes.length) normalized.holes = [blankHole(1)];
   normalized.holes.forEach((hole) => {
-    if (!Object.hasOwn(hole, "expectedUtility")) hole.expectedUtility = hole.utilityType || "Water";
-    if (!Object.hasOwn(hole, "topPipeElevation")) hole.topPipeElevation = "";
-    if (!Object.hasOwn(hole, "pipeColor")) hole.pipeColor = "Blue";
-    if (!Object.hasOwn(hole, "pipeBearing")) hole.pipeBearing = "";
-    if (!Object.hasOwn(hole, "pipeStartDistance")) hole.pipeStartDistance = hole.pipeDistance || "";
-    if (!Object.hasOwn(hole, "pipeEndDistance")) hole.pipeEndDistance = hole.pipeDistance || "";
-    if (!Object.hasOwn(hole, "mapImage")) hole.mapImage = "";
-    if (!Object.hasOwn(hole, "mapLabelImage")) hole.mapLabelImage = "";
-    if (!Object.hasOwn(hole, "mapZoom")) hole.mapZoom = 1;
+    if (!hasOwn(hole, "expectedUtility")) hole.expectedUtility = hole.utilityType || "Water";
+    if (!hasOwn(hole, "topPipeElevation")) hole.topPipeElevation = "";
+    if (!hasOwn(hole, "pipeColor")) hole.pipeColor = "Blue";
+    if (!hasOwn(hole, "pipeBearing")) hole.pipeBearing = "";
+    if (!hasOwn(hole, "pipeStartDistance")) hole.pipeStartDistance = hole.pipeDistance || "";
+    if (!hasOwn(hole, "pipeEndDistance")) hole.pipeEndDistance = hole.pipeDistance || "";
+    if (!Array.isArray(hole.pipes) || !hole.pipes.length) {
+      hole.pipes = [blankPipe(hole)];
+    } else {
+      hole.pipes = hole.pipes.map((pipe, index) => blankPipe(index === 0
+        ? { northing: hole.northing, easting: hole.easting, ...pipe }
+        : pipe));
+    }
+    syncPrimaryPipeLegacy(hole);
+    if (!hasOwn(hole, "mapImage")) hole.mapImage = "";
+    if (!hasOwn(hole, "mapLabelImage")) hole.mapLabelImage = "";
+    if (!hasOwn(hole, "mapZoom")) hole.mapZoom = 1;
     updateCalculatedDepth(hole);
   });
-  normalized.selectedId = normalized.selectedId || normalized.holes[0]?.id || null;
+  normalized.selectedId = normalized.selectedId || (normalized.holes[0] && normalized.holes[0].id) || null;
   return normalized;
 }
 
@@ -207,7 +268,8 @@ function applyProjectData(data) {
 }
 
 function projectDisplayName(data = state) {
-  return data.project?.projectFileName || [data.project?.projectNumber, data.project?.projectName].filter(Boolean).join(" - ") || "Untitled Project";
+  const project = data.project || {};
+  return project.projectFileName || [project.projectNumber, project.projectName].filter(Boolean).join(" - ") || "Untitled Project";
 }
 
 function saveProjectIndex() {
@@ -215,9 +277,9 @@ function saveProjectIndex() {
   localStorage.setItem(ACTIVE_PROJECT_KEY, activeProjectId || "");
 }
 
-function saveActiveProjectNow() {
+async function saveActiveProjectNow() {
   if (!activeProjectId) return;
-  localStorage.setItem(projectStorageKey(activeProjectId), JSON.stringify(state));
+  await writeProjectData(activeProjectId, JSON.parse(JSON.stringify(state)));
   const record = projectRecords.find((project) => project.id === activeProjectId);
   if (record) {
     record.name = projectDisplayName();
@@ -226,7 +288,7 @@ function saveActiveProjectNow() {
   saveProjectIndex();
 }
 
-function hydrate() {
+async function hydrate() {
   try {
     projectRecords = JSON.parse(localStorage.getItem(PROJECT_INDEX_KEY) || "[]");
   } catch {
@@ -243,7 +305,7 @@ function hydrate() {
     }
     activeProjectId = uid();
     projectRecords = [{ id: activeProjectId, name: projectDisplayName(initialData), updatedAt: new Date().toISOString() }];
-    localStorage.setItem(projectStorageKey(activeProjectId), JSON.stringify(normalizeProjectData(initialData)));
+    await writeProjectData(activeProjectId, normalizeProjectData(initialData));
     saveProjectIndex();
   }
 
@@ -252,8 +314,13 @@ function hydrate() {
     activeProjectId = projectRecords[0].id;
   }
 
-  const raw = localStorage.getItem(projectStorageKey(activeProjectId));
-  applyProjectData(raw ? JSON.parse(raw) : blankProjectState());
+  let data = await readProjectData(activeProjectId);
+  if (!data) {
+    const legacyProject = localStorage.getItem(projectStorageKey(activeProjectId));
+    data = legacyProject ? JSON.parse(legacyProject) : blankProjectState();
+    await writeProjectData(activeProjectId, normalizeProjectData(data));
+  }
+  applyProjectData(data);
   render();
 }
 
@@ -262,9 +329,12 @@ function save() {
   $("saveState").textContent = "Saving...";
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
-    saveActiveProjectNow();
-    renderProjectSelector();
-    $("saveState").textContent = "Saved";
+    saveActiveProjectNow().then(() => {
+      renderProjectSelector();
+      $("saveState").textContent = "Saved";
+    }).catch(() => {
+      $("saveState").textContent = "Save failed";
+    });
   }, 120);
 }
 
@@ -337,7 +407,8 @@ function deleteHole() {
   const index = state.holes.findIndex((hole) => hole.id === state.selectedId);
   if (index < 0) return;
   state.holes.splice(index, 1);
-  state.selectedId = state.holes[Math.max(0, index - 1)]?.id || state.holes[0]?.id || null;
+  const previousHole = state.holes[Math.max(0, index - 1)];
+  state.selectedId = (previousHole && previousHole.id) || (state.holes[0] && state.holes[0].id) || null;
   save();
   render();
 }
@@ -363,48 +434,47 @@ function renderProjectSelector() {
   select.value = activeProjectId || "";
 }
 
-function switchProject(id) {
+async function switchProject(id) {
   if (!id || id === activeProjectId) return;
-  saveActiveProjectNow();
+  await saveActiveProjectNow();
   activeProjectId = id;
   localStorage.setItem(ACTIVE_PROJECT_KEY, activeProjectId);
-  const raw = localStorage.getItem(projectStorageKey(activeProjectId));
-  applyProjectData(raw ? JSON.parse(raw) : blankProjectState());
+  applyProjectData(await readProjectData(activeProjectId) || blankProjectState());
   render();
 }
 
-function newProject() {
-  saveActiveProjectNow();
+async function newProject() {
+  await saveActiveProjectNow();
   activeProjectId = uid();
   const data = blankProjectState();
   projectRecords.push({ id: activeProjectId, name: projectDisplayName(data), updatedAt: new Date().toISOString() });
-  localStorage.setItem(projectStorageKey(activeProjectId), JSON.stringify(data));
+  await writeProjectData(activeProjectId, data);
   saveProjectIndex();
   applyProjectData(data);
   render();
   save();
 }
 
-function deleteProject() {
+async function deleteProject() {
   if (projectRecords.length <= 1) {
     alert("At least one project is required.");
     return;
   }
   if (!confirm("Delete this local project from this device?")) return;
+  await removeProjectData(activeProjectId);
   localStorage.removeItem(projectStorageKey(activeProjectId));
   projectRecords = projectRecords.filter((project) => project.id !== activeProjectId);
   activeProjectId = projectRecords[0].id;
   saveProjectIndex();
-  const raw = localStorage.getItem(projectStorageKey(activeProjectId));
-  applyProjectData(raw ? JSON.parse(raw) : blankProjectState());
+  applyProjectData(await readProjectData(activeProjectId) || blankProjectState());
   render();
 }
 
 function renderMapImage() {
   const hole = selectedHole();
-  const mapImage = hole?.mapImage || state.mapImage || "";
-  const mapLabelImage = hole?.mapLabelImage || "";
-  const mapZoom = hole?.mapZoom || state.mapZoom || 1;
+  const mapImage = (hole && hole.mapImage) || state.mapImage || "";
+  const mapLabelImage = (hole && hole.mapLabelImage) || "";
+  const mapZoom = (hole && hole.mapZoom) || state.mapZoom || 1;
   const canvas = $("mapCanvas");
   const image = $("mapImage");
   const labelImage = $("mapLabelImage");
@@ -459,6 +529,22 @@ function centerMapOnSelectedHole() {
   canvas.scrollTop = Math.max(0, targetY - canvas.clientHeight / 2);
 }
 
+function placeSelectedHoleOnMap(event) {
+  const hole = selectedHole();
+  const canvas = $("mapCanvas");
+  if (!hole || !canvas || !(hole.mapImage || state.mapImage)) return;
+
+  const bounds = canvas.getBoundingClientRect();
+  const mapZoom = hole.mapZoom || state.mapZoom || 1;
+  const contentX = canvas.scrollLeft + event.clientX - bounds.left;
+  const contentY = canvas.scrollTop + event.clientY - bounds.top;
+  hole.mapX = clampNumber((contentX / (canvas.clientWidth * mapZoom)) * 100, 0, 100);
+  hole.mapY = clampNumber((contentY / (canvas.clientHeight * mapZoom)) * 100, 0, 100);
+  save();
+  renderPins();
+  renderReport();
+}
+
 
 function markerZoom(mapZoom) {
   return Math.max(0.75, Math.min(2.25, 0.75 + ((mapZoom || 1) - 1) * 0.5625));
@@ -466,7 +552,9 @@ function markerZoom(mapZoom) {
 
 function renderHoleList() {
   $("holeCount").textContent = `${state.holes.length} total`;
-  $("selectedHoleName").textContent = selectedHole()?.holeName || "None";
+  const selectedName = $("selectedHoleName");
+  const currentHole = selectedHole();
+  if (selectedName) selectedName.textContent = (currentHole && currentHole.holeName) || "None";
   $("holeList").innerHTML = state.holes
     .map((hole) => {
       const selected = hole.id === state.selectedId ? " selected" : "";
@@ -503,7 +591,69 @@ function renderHoleForm() {
   holeFields.forEach((field) => {
     $(field).value = hole[field] || "";
   });
+  renderPipeEditor(hole);
   renderPhotos(hole);
+}
+
+function renderPipeEditor(hole) {
+  $("pipeList").innerHTML = hole.pipes.map((pipe, index) => `
+    <section class="pipe-card" data-pipe-id="${pipe.id}">
+      <div class="pipe-card-head">
+        <strong>Pipe ${index + 1}</strong>
+        <div class="inline-actions">
+          <button class="pipe-aerial-btn" type="button" data-pipe-id="${pipe.id}">Center Aerial</button>
+          ${hole.pipes.length > 1 ? `<button class="danger remove-pipe-btn" type="button" data-pipe-id="${pipe.id}">Remove</button>` : ""}
+        </div>
+      </div>
+      <div class="form-grid pipe-form-grid">
+        <label>Northing<input data-pipe-field="northing" value="${escapeHtml(pipe.northing)}" inputmode="decimal" placeholder="N"></label>
+        <label>Easting<input data-pipe-field="easting" value="${escapeHtml(pipe.easting)}" inputmode="decimal" placeholder="E"></label>
+        <label>Pipe / line size<input data-pipe-field="utilitySize" value="${escapeHtml(pipe.utilitySize)}" autocomplete="off" placeholder="8 in, 2 in, etc."></label>
+        <label>Material<input data-pipe-field="material" value="${escapeHtml(pipe.material)}" autocomplete="off" placeholder="PVC, DIP, steel"></label>
+        <label>Pipe color<input data-pipe-field="pipeColor" value="${escapeHtml(pipe.pipeColor)}" autocomplete="off" placeholder="Blue, orange, red, etc."></label>
+        <label>Pipe bearing<input data-pipe-field="pipeBearing" value="${escapeHtml(pipe.pipeBearing)}" inputmode="decimal" placeholder="Approx. degrees"></label>
+        <label>Pipe end 1 length<input data-pipe-field="pipeStartDistance" value="${escapeHtml(pipe.pipeStartDistance)}" inputmode="decimal" placeholder="Map length"></label>
+        <label>Pipe end 2 length<input data-pipe-field="pipeEndDistance" value="${escapeHtml(pipe.pipeEndDistance)}" inputmode="decimal" placeholder="Map length"></label>
+      </div>
+    </section>
+  `).join("");
+}
+
+function addPipe() {
+  const hole = selectedHole();
+  if (!hole) return;
+  hole.pipes.push(blankPipe());
+  syncPrimaryPipeLegacy(hole);
+  save();
+  renderPipeEditor(hole);
+  renderPins();
+  renderReport();
+}
+
+function removePipe(id) {
+  const hole = selectedHole();
+  if (!hole || hole.pipes.length <= 1) return;
+  hole.pipes = hole.pipes.filter((pipe) => pipe.id !== id);
+  syncPrimaryPipeLegacy(hole);
+  save();
+  renderPipeEditor(hole);
+  renderPins();
+  renderReport();
+}
+
+function updatePipe(event) {
+  const input = event.target.closest("[data-pipe-field]");
+  if (!input) return;
+  const card = input.closest("[data-pipe-id]");
+  const hole = selectedHole();
+  const pipeId = card && card.dataset.pipeId;
+  const pipe = hole && hole.pipes.find((item) => item.id === pipeId);
+  if (!pipe) return;
+  pipe[input.dataset.pipeField] = input.value;
+  syncPrimaryPipeLegacy(hole);
+  save();
+  renderPins();
+  renderReport();
 }
 
 function renderPhotos(hole) {
@@ -521,7 +671,7 @@ function renderPhotos(hole) {
 
 function renderPins() {
   const hole = selectedHole();
-  const mapZoom = hole?.mapZoom || state.mapZoom || 1;
+  const mapZoom = (hole && hole.mapZoom) || state.mapZoom || 1;
   const labelZoom = markerZoom(mapZoom);
 
   $("pinLayer").innerHTML = hole ? [hole]
@@ -529,8 +679,8 @@ function renderPins() {
     .map((hole) => {
       const selected = hole.id === state.selectedId ? " selected" : "";
       return `
-        <span class="th-marker${selected}" style="left:${hole.mapX}%;top:${hole.mapY}%;--marker-zoom:${labelZoom};--pipe-color:${pipeColorValue(hole)}">
-          ${pipeOverlay(hole, "pipe-bearing", "px", labelZoom, true)}
+        <span class="th-marker${selected}" style="left:${hole.mapX}%;top:${hole.mapY}%;--marker-zoom:${labelZoom}">
+          ${hole.pipes.map((pipe) => pipeOverlay(pipe, "pipe-bearing", "px", labelZoom, true)).join("")}
           <span class="th-crosshair" aria-hidden="true">
             <svg viewBox="-50 -50 100 100" focusable="false">
               <circle cx="0" cy="0" r="22"></circle>
@@ -553,13 +703,13 @@ function mapPointLabel(hole) {
   return `<b><span>${escapeHtml(hole.holeName || "TH")}</span><span>${escapeHtml(mapUtilityLabel(hole))}</span></b>`;
 }
 
-function pipeOverlay(hole, className, unit, labelZoom = 1, anchored = false) {
-  const bearing = normalizeBearing(hole.pipeBearing);
+function pipeOverlay(pipe, className, unit, labelZoom = 1, anchored = false) {
+  const bearing = normalizeBearing(pipe.pipeBearing);
   if (bearing === null) return "";
 
   const fallback = unit === "in" ? 0.8 : 95;
-  const start = pipeDisplayDistance(hole.pipeStartDistance, fallback, unit);
-  const end = pipeDisplayDistance(hole.pipeEndDistance, fallback, unit);
+  const start = pipeDisplayDistance(pipe.pipeStartDistance, fallback, unit);
+  const end = pipeDisplayDistance(pipe.pipeEndDistance, fallback, unit);
 
   const scale = unit === "in" ? 96 : 1;
   const startPx = start * scale;
@@ -580,8 +730,8 @@ function pipeOverlay(hole, className, unit, labelZoom = 1, anchored = false) {
   const lineClass = isReport ? "report-pipe-vector-line" : "pipe-vector-line";
 
   const positionStyle = anchored
-    ? `left:0;top:0;--marker-zoom:${labelZoom};--pipe-color:${pipeColorValue(hole)}`
-    : `left:${hole.mapX}%;top:${hole.mapY}%;--marker-zoom:${labelZoom};--pipe-color:${pipeColorValue(hole)}`;
+    ? `left:0;top:0;--marker-zoom:${labelZoom};--pipe-color:${pipeColorValue(pipe)}`
+    : `left:0;top:0;--marker-zoom:${labelZoom};--pipe-color:${pipeColorValue(pipe)}`;
 
   return `
     <span class="${vectorClass}" style="${positionStyle}">
@@ -594,7 +744,7 @@ function pipeOverlay(hole, className, unit, labelZoom = 1, anchored = false) {
 
 function projectCoordinateWkid() {
   const selected = state.project.coordinateSystem || "2236";
-  return selected === "custom" ? state.project.customCoordinateSystem?.trim() : selected;
+  return selected === "custom" ? (state.project.customCoordinateSystem || "").trim() : selected;
 }
 
 async function convertToLatLong(easting, northing) {
@@ -620,9 +770,9 @@ async function convertToLatLong(easting, northing) {
   const response = await fetch(`https://utility.arcgisonline.com/ArcGIS/rest/services/Geometry/GeometryServer/project?${params.toString()}`);
   if (!response.ok) throw new Error("Coordinate conversion failed.");
   const data = await response.json();
-  const point = data.geometries?.[0];
+  const point = data.geometries && data.geometries[0];
   if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) {
-    throw new Error(data.error?.message || "Coordinate conversion returned no point.");
+    throw new Error((data.error && data.error.message) || "Coordinate conversion returned no point.");
   }
   if (Math.abs(point.y) > 90 || Math.abs(point.x) > 180) {
     throw new Error("Converted coordinate is outside valid lat/long range. Check the coordinate system.");
@@ -630,14 +780,16 @@ async function convertToLatLong(easting, northing) {
   return { lat: point.y, lng: point.x };
 }
 
-async function aerialFromCoordinates() {
+async function aerialFromCoordinates(pipeId) {
   const hole = selectedHole();
   if (!hole) return;
+  const pipe = hole.pipes.find((item) => item.id === pipeId) || hole.pipes[0];
+  if (!pipe) return;
 
-  const northing = numericValue(hole.northing);
-  const easting = numericValue(hole.easting);
+  const northing = numericValue(pipe.northing);
+  const easting = numericValue(pipe.easting);
   if (northing === null || easting === null) {
-    $("mapTip").textContent = "Enter northing and easting first.";
+    $("mapTip").textContent = "Enter northing and easting for this pipe first.";
     return;
   }
 
@@ -666,7 +818,8 @@ async function aerialFromCoordinates() {
   renderMapImage();
   renderPins();
   renderReport();
-  $("mapTip").innerHTML = `Aerial centered on <b id="selectedHoleName">${escapeHtml(hole.holeName)}</b>`;
+  const pipeNumber = hole.pipes.findIndex((item) => item.id === pipe.id) + 1;
+  $("mapTip").innerHTML = `Aerial centered on <b id="selectedHoleName">${escapeHtml(hole.holeName)}</b>, Pipe ${pipeNumber}`;
 }
 
 function esriExportUrl(service, bbox, transparent) {
@@ -772,7 +925,7 @@ function buildHoleDataSheet(hole, projectTitle, sheetNumber, totalSheets) {
             <div class="report-map-layer" style="${reportMapLayerStyle(hole, mapZoom)}">
               ${mapImage ? `<img src="${mapImage}" alt="">` : `<div class="map-placeholder"><strong>Aerial image / location map</strong><span>Generate or upload aerial for this test hole</span></div>`}
               ${mapLabelImage ? `<img class="report-label-image" src="${mapLabelImage}" alt="">` : ""}
-              ${Number.isFinite(hole.mapX) && Number.isFinite(hole.mapY) ? `<span class="report-th-marker" style="left:${hole.mapX}%;top:${hole.mapY}%;--pipe-color:${pipeColorValue(hole)}">${pipeOverlay(hole, "report-pipe-bearing", "in", 1, true)}<span class="report-th-crosshair" aria-hidden="true"><svg viewBox="-50 -50 100 100" focusable="false"><circle cx="0" cy="0" r="18"></circle><line x1="-30" y1="0" x2="30" y2="0"></line><line x1="0" y1="-30" x2="0" y2="30"></line></svg></span><span class="report-th-label">${mapPointLabel(hole)}</span></span>` : ""}
+              ${Number.isFinite(hole.mapX) && Number.isFinite(hole.mapY) ? `<span class="report-th-marker" style="left:${hole.mapX}%;top:${hole.mapY}%;--marker-zoom:${markerZoom(mapZoom)}">${hole.pipes.map((pipe) => pipeOverlay(pipe, "report-pipe-bearing", "px", markerZoom(mapZoom), true)).join("")}<span class="report-th-crosshair" aria-hidden="true"><svg viewBox="-50 -50 100 100" focusable="false"><circle cx="0" cy="0" r="22"></circle><line x1="-36" y1="0" x2="36" y2="0"></line><line x1="0" y1="-36" x2="0" y2="36"></line></svg></span><span class="report-th-label">${mapPointLabel(hole)}</span></span>` : ""}
             </div>
           </div>
         </div>
@@ -786,6 +939,18 @@ function buildHoleDataSheet(hole, projectTitle, sheetNumber, totalSheets) {
 }
 
 function holeDataRows(hole) {
+  const pipeRows = hole.pipes.map((pipe, index) => `
+    <tr>
+      <th>Pipe ${index + 1}</th><td>${escapeHtml([pipe.utilitySize, pipe.material].filter(Boolean).join(" / "))}</td>
+      <th>Direction</th><td>${escapeHtml(pipeDirectionPair(pipe))}</td>
+      <th>Color</th><td>${escapeHtml(pipeColorLabel(pipe))}</td>
+    </tr>
+    <tr>
+      <th>Pipe ${index + 1} Northing</th><td>${escapeHtml(pipe.northing)}</td>
+      <th>Pipe ${index + 1} Easting</th><td>${escapeHtml(pipe.easting)}</td>
+      <th></th><td></td>
+    </tr>
+  `).join("");
   return `
     <tr>
       <th>Test Hole</th><td>${escapeHtml(hole.holeName)}</td>
@@ -793,25 +958,12 @@ function holeDataRows(hole) {
       <th>Found Utility</th><td>${escapeHtml(hole.utilityType)}</td>
     </tr>
     <tr>
-      <th>Size</th><td>${escapeHtml(hole.utilitySize)}</td>
-      <th>Material</th><td>${escapeHtml(hole.material)}</td>
       <th>Surface</th><td>${escapeHtml(hole.surfaceType)}</td>
-    </tr>
-    <tr>
       <th>Ground Elev.</th><td>${escapeHtml(hole.elevation)}</td>
       <th>Top Pipe Elev.</th><td>${escapeHtml(hole.topPipeElevation)}</td>
-      <th>Depth to T.O.P.</th><td>${escapeHtml(hole.depthTop)}</td>
     </tr>
-    <tr>
-      <th>Northing</th><td>${escapeHtml(hole.northing)}</td>
-      <th>Easting</th><td>${escapeHtml(hole.easting)}</td>
-      <th>Method</th><td>${escapeHtml(hole.method)}</td>
-    </tr>
-    <tr>
-      <th>Pipe Direction</th><td>${escapeHtml(pipeDirectionPair(hole))}</td>
-      <th>Pipe Color</th><td>${escapeHtml(pipeColorLabel(hole))}</td>
-      <th></th><td></td>
-    </tr>
+    <tr><th>Depth / Method</th><td colspan="5">${escapeHtml([hole.depthTop, hole.method].filter(Boolean).join(" / "))}</td></tr>
+    ${pipeRows}
     <tr>
       <th>Description</th><td colspan="5">${escapeHtml(hole.description)}</td>
     </tr>
@@ -822,7 +974,7 @@ function holeDataRows(hole) {
 }
 
 function reportPipeBearing(hole) {
-  return pipeOverlay(hole, "report-pipe-bearing", "in", 1);
+  return hole.pipes.map((pipe) => pipeOverlay(pipe, "report-pipe-bearing", "in", 1)).join("");
 }
 
 
@@ -914,7 +1066,8 @@ function pipeDisplayDistance(value, fallback, unit = "px") {
 }
 
 function buildHolePhotoSheet(hole, projectTitle, sheetNumber, totalSheets) {
-  const photoFigures = (hole.photos || [])
+  const photos = hole.photos || [];
+  const photoFigures = photos
     .map(
       (photo, index) => `
         <figure>
@@ -930,7 +1083,7 @@ function buildHolePhotoSheet(hole, projectTitle, sheetNumber, totalSheets) {
       <div class="sheet-frame photo-page-frame">
         ${titleBlock(`${hole.holeName || "TEST HOLE"} PHOTOGRAPHS`, projectTitle, String(sheetNumber), totalSheets)}
         <div class="photo-page-title">${escapeHtml(hole.holeName || "Test Hole")} Photographs</div>
-        <div class="photo-page-grid">
+        <div class="photo-page-grid" style="--photo-rows:${Math.max(1, Math.ceil(photos.length / 2))}">
           ${photoFigures || `<div class="empty-photo">No photos attached.</div>`}
         </div>
       </div>
@@ -978,12 +1131,15 @@ function exportCsv() {
     "utilitySize",
     "material",
     "pipeColor",
+    "pipes",
     "description",
     "holeNotes",
     "mapX",
     "mapY",
   ];
-  const rows = [headers, ...state.holes.map((hole) => headers.map((header) => hole[header] ?? ""))];
+  const rows = [headers, ...state.holes.map((hole) => headers.map((header) => header === "pipes"
+    ? hole.pipes.map((pipe, index) => `Pipe ${index + 1}: N ${pipe.northing} E ${pipe.easting} ${pipe.utilitySize} ${pipe.material} ${pipeColorLabel(pipe)} ${pipeDirectionPair(pipe)}`.trim()).join(" | ")
+    : (hole[header] === null || hole[header] === undefined ? "" : hole[header])))];
   download(
     `${state.project.projectNumber || "test-holes"}.csv`,
     rows.map((row) => row.map(csvCell).join(",")).join("\n"),
@@ -992,7 +1148,7 @@ function exportCsv() {
 }
 
 function csvCell(value) {
-  const text = String(value).replaceAll('"', '""');
+  const text = String(value).replace(/"/g, '""');
   return /[",\n]/.test(text) ? `"${text}"` : text;
 }
 
@@ -1029,10 +1185,10 @@ function exportProjectFile() {
 
 function exportGeoJson() {
   const features = state.holes
-    .map((hole) => {
-      const lat = Number(hole.northing);
-      const lng = Number(hole.easting);
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+    .flatMap((hole) => hole.pipes.map((pipe, index) => {
+      const lat = numericValue(pipe.northing);
+      const lng = numericValue(pipe.easting);
+      if (lat === null || lng === null) return null;
       return {
         type: "Feature",
         geometry: {
@@ -1040,12 +1196,18 @@ function exportGeoJson() {
           coordinates: [lng, lat],
         },
         properties: {
-          name: hole.holeName,
+          name: `${hole.holeName} Pipe ${index + 1}`,
+          testHole: hole.holeName,
+          pipeNumber: index + 1,
           expectedUtility: hole.expectedUtility,
           foundUtility: hole.utilityType,
-          size: hole.utilitySize,
-          material: hole.material,
-          pipeColor: pipeColorLabel(hole),
+          size: pipe.utilitySize,
+          material: pipe.material,
+          pipeColor: pipeColorLabel(pipe),
+          bearing: pipe.pipeBearing,
+          direction: pipeDirectionPair(pipe),
+          end1Length: pipe.pipeStartDistance,
+          end2Length: pipe.pipeEndDistance,
           groundElevation: hole.elevation,
           topPipeElevation: hole.topPipeElevation,
           depthTop: hole.depthTop,
@@ -1055,7 +1217,7 @@ function exportGeoJson() {
           projectName: state.project.projectName,
         },
       };
-    })
+    }))
     .filter(Boolean);
 
   download(
@@ -1066,9 +1228,9 @@ function exportGeoJson() {
 }
 
 function projectMapUrl() {
-  const link = state.project.mapLink?.trim();
+  const link = (state.project.mapLink || "").trim();
   if (link) return link;
-  const location = state.project.location?.trim();
+  const location = (state.project.location || "").trim();
   return location ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}` : "";
 }
 
@@ -1096,6 +1258,69 @@ function emailPdf() {
   );
   window.print();
   window.location.href = `mailto:?subject=${subject}&body=${body}`;
+}
+
+async function savePdf() {
+  if (!window.html2canvas || !window.jspdf || !window.jspdf.jsPDF) {
+    alert("PDF tools did not load. Check your internet connection and try again.");
+    return;
+  }
+
+  const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  const pdfWindow = isIos ? window.open("", "_blank") : null;
+  if (pdfWindow) {
+    pdfWindow.document.write("<p style='font-family:sans-serif;padding:24px'>Creating PDF...</p>");
+  }
+
+  const button = $("pdfBtn");
+  const originalText = button.textContent;
+  button.disabled = true;
+  button.textContent = "Creating PDF...";
+  renderReport();
+
+  const report = $("printReport");
+  report.classList.add("pdf-export-active");
+
+  try {
+    const sheets = Array.from(report.children).filter((element) => element.classList.contains("sheet"));
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ orientation: "portrait", unit: "in", format: "letter", compress: true });
+
+    for (let index = 0; index < sheets.length; index += 1) {
+      const canvas = await window.html2canvas(sheets[index], {
+        backgroundColor: "#ffffff",
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        windowWidth: 816,
+      });
+      if (index > 0) pdf.addPage("letter", "portrait");
+      pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, 8.5, 11, undefined, "FAST");
+    }
+
+    const filename = `${safeFilePart(state.project.projectFileName || state.project.projectNumber || state.project.projectName)}.pdf`;
+    const blob = pdf.output("blob");
+    const url = URL.createObjectURL(blob);
+
+    if (pdfWindow) {
+      pdfWindow.location.href = url;
+    } else {
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch (error) {
+    if (pdfWindow) pdfWindow.close();
+    alert(`PDF creation failed: ${error.message}`);
+  } finally {
+    report.classList.remove("pdf-export-active");
+    button.disabled = false;
+    button.textContent = originalText;
+  }
 }
 
 function download(name, content, type) {
@@ -1133,6 +1358,7 @@ function bindEvents() {
   $("duplicateHoleBtn").addEventListener("click", duplicateHole);
   $("deleteHoleBtn").addEventListener("click", deleteHole);
   $("mapImage").addEventListener("error", () => {
+    if (!$("mapImage").getAttribute("src")) return;
     $("mapTip").textContent = "Aerial image failed to load. Check the coordinate system and internet connection.";
   });
   $("mapImage").addEventListener("load", () => {
@@ -1142,9 +1368,16 @@ function bindEvents() {
     }
   });
   $("mapImageInput").addEventListener("change", loadMapImage);
-  $("aerialFromCoordsBtn").addEventListener("click", aerialFromCoordinates);
-  $("zoomOutBtn").addEventListener("click", () => setMapZoom((selectedHole()?.mapZoom || state.mapZoom || 1) - 0.25));
-  $("zoomInBtn").addEventListener("click", () => setMapZoom((selectedHole()?.mapZoom || state.mapZoom || 1) + 0.25));
+  $("mapCanvas").addEventListener("click", placeSelectedHoleOnMap);
+  $("aerialFromCoordsBtn").addEventListener("click", () => aerialFromCoordinates());
+  $("zoomOutBtn").addEventListener("click", () => {
+    const hole = selectedHole();
+    setMapZoom(((hole && hole.mapZoom) || state.mapZoom || 1) - 0.25);
+  });
+  $("zoomInBtn").addEventListener("click", () => {
+    const hole = selectedHole();
+    setMapZoom(((hole && hole.mapZoom) || state.mapZoom || 1) + 0.25);
+  });
   $("zoomResetBtn").addEventListener("click", () => setMapZoom(1));
   $("clearMapBtn").addEventListener("click", () => {
     const hole = selectedHole();
@@ -1161,14 +1394,25 @@ function bindEvents() {
     renderPins();
     renderReport();
   });
-  $("photoInput").addEventListener("change", addPhotos);
   $("photoRollInput").addEventListener("change", addPhotos);
+  $("addPipeBtn").addEventListener("click", addPipe);
+  $("pipeList").addEventListener("input", updatePipe);
+  $("pipeList").addEventListener("click", (event) => {
+    const aerialButton = event.target.closest(".pipe-aerial-btn");
+    if (aerialButton) {
+      aerialFromCoordinates(aerialButton.dataset.pipeId);
+      return;
+    }
+    const button = event.target.closest(".remove-pipe-btn");
+    if (button) removePipe(button.dataset.pipeId);
+  });
   $("clearPhotosBtn").addEventListener("click", clearPhotos);
   $("refreshReportBtn").addEventListener("click", renderReport);
   $("printBtn").addEventListener("click", () => {
     renderReport();
     window.print();
   });
+  $("pdfBtn").addEventListener("click", savePdf);
   $("csvBtn").addEventListener("click", exportCsv);
   $("geoJsonBtn").addEventListener("click", exportGeoJson);
   $("openProjectMapBtn").addEventListener("click", openProjectMap);
@@ -1178,8 +1422,34 @@ function bindEvents() {
   $("jsonInput").addEventListener("change", restoreJson);
 }
 
-bindEvents();
-hydrate();
+async function initializeApp() {
+  const addButton = $("addHoleBtn");
+  if (addButton) addButton.disabled = true;
+
+  try {
+    await hydrate();
+  } catch {
+    activeProjectId = activeProjectId || uid();
+    projectRecords = projectRecords.length ? projectRecords : [{
+      id: activeProjectId,
+      name: "Untitled Project",
+      updatedAt: new Date().toISOString(),
+    }];
+    applyProjectData(blankProjectState());
+    render();
+    $("saveState").textContent = "Temporary session";
+  }
+
+  bindEvents();
+  if (addButton) addButton.disabled = false;
+}
+
+initializeApp();
+
+window.addEventListener("pagehide", () => {
+  clearTimeout(saveTimer);
+  saveActiveProjectNow().catch(() => {});
+});
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {

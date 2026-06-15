@@ -16,6 +16,7 @@
       </div>
       <div class="topbar-actions">
         <button id="addHoleBtn" class="primary" type="button">Add TH</button>
+        <button id="pdfBtn" type="button">Save PDF</button>
         <button id="printBtn" type="button">Print</button>
       </div>
     </header>
@@ -124,7 +125,7 @@
         </div>
         <div class="map-tools">
           <button id="clearMapBtn" type="button">Clear Image</button>
-          <button id="aerialFromCoordsBtn" type="button">Aerial From N/E</button>
+          <button id="aerialFromCoordsBtn" type="button">Aerial From Pipe 1</button>
           <button id="zoomOutBtn" type="button">Zoom -</button>
           <button id="zoomInBtn" type="button">Zoom +</button>
           <button id="zoomResetBtn" type="button">Reset</button>
@@ -204,14 +205,6 @@
               </select>
             </label>
             <label>
-              Northing
-              <input id="northing" inputmode="decimal" placeholder="N">
-            </label>
-            <label>
-              Easting
-              <input id="easting" inputmode="decimal" placeholder="E">
-            </label>
-            <label>
               Ground elevation
               <input id="elevation" inputmode="decimal" placeholder="Ground elev.">
             </label>
@@ -223,30 +216,13 @@
               Depth to top of pipe
               <input id="depthTop" inputmode="decimal" placeholder="Auto" readonly>
             </label>
-            <label>
-              Pipe / line size
-              <input id="utilitySize" autocomplete="off" placeholder="8 in, 2 in, etc.">
-            </label>
-            <label>
-              Material
-              <input id="material" autocomplete="off" placeholder="PVC, DIP, steel">
-            </label>
-            <label>
-              Pipe color
-              <input id="pipeColor" autocomplete="off" placeholder="Blue, orange, red, etc.">
-            </label>
-            <label>
-              Pipe bearing
-              <input id="pipeBearing" inputmode="decimal" placeholder="Approx. degrees">
-            </label>
-            <label>
-              Pipe end 1 length
-              <input id="pipeStartDistance" inputmode="decimal" placeholder="Map length">
-            </label>
-            <label>
-              Pipe end 2 length
-              <input id="pipeEndDistance" inputmode="decimal" placeholder="Map length">
-            </label>
+            <div class="wide pipe-editor">
+              <div class="pipe-editor-head">
+                <h3>Pipes</h3>
+                <button id="addPipeBtn" type="button">Add Pipe</button>
+              </div>
+              <div id="pipeList" class="pipe-list"></div>
+            </div>
             <label class="wide">
               Description
               <textarea id="description" rows="3" placeholder="Observed utility, offsets, condition, conflicts"></textarea>
@@ -258,10 +234,6 @@
           </div>
 
           <div class="photo-row">
-            <label class="file-button">
-              Add Photos
-              <input id="photoInput" type="file" accept="image/*" capture="environment" multiple>
-            </label>
             <label class="file-button">
               Camera Roll
               <input id="photoRollInput" type="file" accept="image/*" multiple>
@@ -295,6 +267,8 @@
 
     <section id="printReport" class="print-report" aria-label="Printable report"></section>
 
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
     <script src="app.js"></script>
   </body>
 </html>
