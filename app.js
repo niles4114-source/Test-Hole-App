@@ -1066,7 +1066,7 @@ function pipeDisplayDistance(value, fallback, unit = "px") {
 }
 
 function buildHolePhotoSheet(hole, projectTitle, sheetNumber, totalSheets) {
-  const photos = hole.photos || [];
+  const photos = (hole.photos || []).slice(0, 4);
   const photoFigures = photos
     .map(
       (photo, index) => `
@@ -1083,7 +1083,7 @@ function buildHolePhotoSheet(hole, projectTitle, sheetNumber, totalSheets) {
       <div class="sheet-frame photo-page-frame">
         ${titleBlock(`${hole.holeName || "TEST HOLE"} PHOTOGRAPHS`, projectTitle, String(sheetNumber), totalSheets)}
         <div class="photo-page-title">${escapeHtml(hole.holeName || "Test Hole")} Photographs</div>
-        <div class="photo-page-grid" style="--photo-rows:${Math.max(1, Math.ceil(photos.length / 2))}">
+        <div class="photo-page-grid">
           ${photoFigures || `<div class="empty-photo">No photos attached.</div>`}
         </div>
       </div>
@@ -1279,20 +1279,31 @@ async function savePdf() {
   renderReport();
 
   const report = $("printReport");
-  report.classList.add("pdf-export-active");
+  const sourceSheets = Array.from(report.children).filter((element) => element.classList.contains("sheet"));
+  const stage = document.createElement("div");
+  stage.className = "pdf-render-stage";
+  document.body.appendChild(stage);
 
   try {
-    const sheets = Array.from(report.children).filter((element) => element.classList.contains("sheet"));
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF({ orientation: "portrait", unit: "in", format: "letter", compress: true });
 
-    for (let index = 0; index < sheets.length; index += 1) {
-      const canvas = await window.html2canvas(sheets[index], {
+    for (let index = 0; index < sourceSheets.length; index += 1) {
+      stage.replaceChildren(sourceSheets[index].cloneNode(true));
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+      const sheet = stage.firstElementChild;
+      const bounds = sheet.getBoundingClientRect();
+      const canvas = await window.html2canvas(sheet, {
         backgroundColor: "#ffffff",
         scale: 2,
         useCORS: true,
         logging: false,
-        windowWidth: 816,
+        width: Math.ceil(bounds.width),
+        height: Math.ceil(bounds.height),
+        windowWidth: Math.ceil(bounds.width),
+        scrollX: 0,
+        scrollY: 0,
       });
       if (index > 0) pdf.addPage("letter", "portrait");
       pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, 8.5, 11, undefined, "FAST");
@@ -1317,7 +1328,7 @@ async function savePdf() {
     if (pdfWindow) pdfWindow.close();
     alert(`PDF creation failed: ${error.message}`);
   } finally {
-    report.classList.remove("pdf-export-active");
+    stage.remove();
     button.disabled = false;
     button.textContent = originalText;
   }
