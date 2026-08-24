@@ -1,6 +1,6 @@
 const STORAGE_KEY = "test-hole-collector-v1";
 const PROJECT_INDEX_KEY = "test-hole-project-index-v1";
-const APP_VERSION = "v117";
+const APP_VERSION = "v118";
 const ACTIVE_PROJECT_KEY = "test-hole-active-project-v1";
 const PROJECT_DB_NAME = "test-hole-collector-projects-v1";
 const PROJECT_STORE = "projects";
@@ -1238,7 +1238,7 @@ function holeDataRows(hole) {
     <tr>
       <th>Pipe ${index + 1} Northing</th><td>${escapeHtml(formatOneDecimal(pipe.northing))}</td>
       <th>Pipe ${index + 1} Easting</th><td>${escapeHtml(formatOneDecimal(pipe.easting))}</td>
-      <th></th><td></td>
+      <th>Ground Elev.</th><td>${escapeHtml(formatOneDecimal(hole.elevation))}</td>
     </tr>
   `).join("");
   return `
@@ -1249,11 +1249,13 @@ function holeDataRows(hole) {
     </tr>
     <tr>
       <th>Surface</th><td>${escapeHtml(hole.surfaceType)}</td>
-      <th>Ground Elev.</th><td>${escapeHtml(formatOneDecimal(hole.elevation))}</td>
-      <th>Top Pipe Elev.</th><td>${escapeHtml(formatOneDecimal(hole.topPipeElevation))}</td>
+      <th>Method</th><td colspan="3">${escapeHtml(hole.method)}</td>
     </tr>
-    <tr><th>Depth / Method</th><td colspan="5">${escapeHtml([formatOneDecimal(hole.depthTop), hole.method].filter(Boolean).join(" / "))}</td></tr>
     ${pipeRows}
+    <tr>
+      <th>Top Pipe Elev.</th><td>${escapeHtml(formatOneDecimal(hole.topPipeElevation))}</td>
+      <th>Depth</th><td colspan="3">${escapeHtml(formatOneDecimal(hole.depthTop))}</td>
+    </tr>
     <tr>
       <th>Description</th><td colspan="5">${escapeHtml(hole.description)}</td>
     </tr>
