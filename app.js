@@ -854,18 +854,17 @@ function pipeVectorCoordinates(pipe, unit) {
   const start = pipeDisplayDistance(pipe.pipeStartDistance, fallback, unit);
   const end = pipeDisplayDistance(pipe.pipeEndDistance, fallback, unit);
   const scale = unit === "in" ? 96 : 1;
-  const startPx = start * scale;
-  const endPx = end * scale;
+  const halfPx = ((start + end) * scale) / 2;
   const rad = bearing * Math.PI / 180;
   const dx = Math.sin(rad);
   const dy = -Math.cos(rad);
   const center = 500;
 
   return {
-    x1: center - dx * startPx,
-    y1: center - dy * startPx,
-    x2: center + dx * endPx,
-    y2: center + dy * endPx,
+    x1: center - dx * halfPx,
+    y1: center - dy * halfPx,
+    x2: center + dx * halfPx,
+    y2: center + dy * halfPx,
   };
 }
 
