@@ -830,14 +830,7 @@ function renderPins() {
       const selected = hole.id === state.selectedId ? " selected" : "";
       return `
         <span class="th-marker${selected}" style="left:${hole.mapX}%;top:${hole.mapY}%;--marker-zoom:${labelZoom}">
-          ${hole.pipes.map((pipe) => pipeOverlay(pipe, "pipe-bearing", "px", labelZoom, true)).join("")}
-          <span class="th-crosshair" aria-hidden="true">
-            <svg viewBox="-50 -50 100 100" focusable="false">
-              <circle cx="0" cy="0" r="22"></circle>
-              <line x1="-36" y1="0" x2="36" y2="0"></line>
-              <line x1="0" y1="-36" x2="0" y2="36"></line>
-            </svg>
-          </span>
+          ${markerGraphic(hole, false, labelZoom)}
           <span class="th-label">${mapPointLabel(hole)}</span>
         </span>
       `;
@@ -851,6 +844,58 @@ function mapUtilityLabel(hole) {
 
 function mapPointLabel(hole) {
   return `<b><span>${escapeHtml(hole.holeName || "TH")}</span><span>${escapeHtml(mapUtilityLabel(hole))}</span></b>`;
+}
+
+function pipeVectorCoordinates(pipe, unit) {
+  const bearing = normalizeBearing(pipe.pipeBearing);
+  if (bearing === null) return null;
+
+  const fallback = unit === "in" ? 0.8 : 95;
+  const start = pipeDisplayDistance(pipe.pipeStartDistance, fallback, unit);
+  const end = pipeDisplayDistance(pipe.pipeEndDistance, fallback, unit);
+  const scale = unit === "in" ? 96 : 1;
+  const startPx = start * scale;
+  const endPx = end * scale;
+  const rad = bearing * Math.PI / 180;
+  const dx = Math.sin(rad);
+  const dy = -Math.cos(rad);
+  const center = 500;
+
+  return {
+    x1: center - dx * startPx,
+    y1: center - dy * startPx,
+    x2: center + dx * endPx,
+    y2: center + dy * endPx,
+  };
+}
+
+function pipeSvgLine(pipe, lineClass, unit) {
+  const coords = pipeVectorCoordinates(pipe, unit);
+  if (!coords) return "";
+  return `<line class="${lineClass}" style="--pipe-color:${pipeColorValue(pipe)}" x1="${coords.x1}" y1="${coords.y1}" x2="${coords.x2}" y2="${coords.y2}"></line>`;
+}
+
+function markerGraphic(hole, isReport, labelZoom = 1) {
+  const graphicClass = isReport ? "report-marker-graphic" : "marker-graphic";
+  const lineClass = isReport ? "report-pipe-vector-line" : "pipe-vector-line";
+  const crossClass = isReport ? "report-marker-crosshair" : "marker-crosshair";
+  const radius = 11 * labelZoom;
+  const arm = 18 * labelZoom;
+  const center = 500;
+  const pipeLines = (hole.pipes || []).map((pipe) => pipeSvgLine(pipe, lineClass, "px")).join("");
+
+  return `
+    <span class="${graphicClass}" style="--marker-zoom:${labelZoom}" aria-hidden="true">
+      <svg viewBox="0 0 1000 1000" focusable="false">
+        ${pipeLines}
+        <g class="${crossClass}">
+          <circle cx="${center}" cy="${center}" r="${radius}"></circle>
+          <line x1="${center - arm}" y1="${center}" x2="${center + arm}" y2="${center}"></line>
+          <line x1="${center}" y1="${center - arm}" x2="${center}" y2="${center + arm}"></line>
+        </g>
+      </svg>
+    </span>
+  `;
 }
 
 function pipeOverlay(pipe, className, unit, labelZoom = 1, anchored = false) {
@@ -1140,7 +1185,7 @@ function buildHoleDataSheet(hole, projectTitle, sheetNumber, totalSheets) {
             <div class="report-map-layer" style="${reportMapLayerStyle(hole, mapZoom)}">
               ${mapImage ? `<img src="${mapImage}" alt="">` : `<div class="map-placeholder"><strong>Aerial image / location map</strong><span>Generate or upload aerial for this test hole</span></div>`}
               ${mapLabelImage ? `<img class="report-label-image" src="${mapLabelImage}" alt="">` : ""}
-              ${Number.isFinite(hole.mapX) && Number.isFinite(hole.mapY) ? `<span class="report-th-marker" style="left:${hole.mapX}%;top:${hole.mapY}%;--marker-zoom:${markerZoom(mapZoom)}">${hole.pipes.map((pipe) => pipeOverlay(pipe, "report-pipe-bearing", "px", markerZoom(mapZoom), true)).join("")}<span class="report-th-crosshair" aria-hidden="true"><svg viewBox="-50 -50 100 100" focusable="false"><circle cx="0" cy="0" r="22"></circle><line x1="-36" y1="0" x2="36" y2="0"></line><line x1="0" y1="-36" x2="0" y2="36"></line></svg></span><span class="report-th-label">${mapPointLabel(hole)}</span></span>` : ""}
+              ${Number.isFinite(hole.mapX) && Number.isFinite(hole.mapY) ? `<span class="report-th-marker" style="left:${hole.mapX}%;top:${hole.mapY}%;--marker-zoom:${markerZoom(mapZoom)}">${markerGraphic(hole, true, markerZoom(mapZoom))}<span class="report-th-label">${mapPointLabel(hole)}</span></span>` : ""}
             </div>
           </div>
         </div>
