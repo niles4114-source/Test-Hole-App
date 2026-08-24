@@ -782,7 +782,7 @@ textarea {
 
 .title-block {
   display: grid;
-  grid-template-columns: 1.25in 1fr 1.45in 1.35in;
+  grid-template-columns: 1.6in 1fr 1.35in 1.25in;
   min-height: 0.62in;
   border: 2px solid #111;
   font-size: 9px;
@@ -799,6 +799,20 @@ textarea {
 
 .title-block > div:last-child {
   border-right: 0;
+}
+
+.tb-brand {
+  align-items: center;
+  justify-items: center;
+  padding: 4px;
+}
+
+.tb-logo {
+  display: block;
+  width: 100%;
+  max-width: 1.48in;
+  max-height: 0.5in;
+  object-fit: contain;
 }
 
 .tb-brand b {

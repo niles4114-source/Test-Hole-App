@@ -1,6 +1,6 @@
 const STORAGE_KEY = "test-hole-collector-v1";
 const PROJECT_INDEX_KEY = "test-hole-project-index-v1";
-const APP_VERSION = "v116";
+const APP_VERSION = "v117";
 const ACTIVE_PROJECT_KEY = "test-hole-active-project-v1";
 const PROJECT_DB_NAME = "test-hole-collector-projects-v1";
 const PROJECT_STORE = "projects";
@@ -1384,10 +1384,9 @@ function buildHolePhotoSheet(hole, projectTitle, sheetNumber, totalSheets) {
 function titleBlock(sheetTitle, projectTitle, sheetNumber, totalSheets) {
   const p = state.project;
   return `
-    <div class="title-block">
-      <div class="tb-brand">
-        <b>DEGROVE</b>
-        <span>Surveyors Inc.</span>
+      <div class="title-block">
+        <div class="tb-brand">
+        <img class="tb-logo" src="degrove-logo.jpg" alt="Degrove Surveyors, Inc.">
       </div>
       <div class="tb-project">
         <b>${escapeHtml(projectTitle || "Test Hole Project")}</b>
