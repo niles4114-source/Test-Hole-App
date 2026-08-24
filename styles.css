@@ -1500,6 +1500,21 @@ textarea {
   object-fit: fill !important;
 }
 
+.report-map-layer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.report-th-marker,
+.report-label-image,
+.north-arrow {
+  z-index: 3 !important;
+}
+
 .pipe-card input[data-pipe-field="pipeColor"] {
   min-height: 42px;
 }
