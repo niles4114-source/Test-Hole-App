@@ -1,6 +1,6 @@
 const STORAGE_KEY = "test-hole-collector-v1";
 const PROJECT_INDEX_KEY = "test-hole-project-index-v1";
-const APP_VERSION = "v120";
+const APP_VERSION = "v122";
 const ACTIVE_PROJECT_KEY = "test-hole-active-project-v1";
 const PROJECT_DB_NAME = "test-hole-collector-projects-v1";
 const PROJECT_STORE = "projects";
@@ -44,6 +44,9 @@ const holeFields = [
 const pipeFields = [
   "northing",
   "easting",
+  "utilityType",
+  "topPipeElevation",
+  "depthTop",
   "utilitySize",
   "material",
   "pipeColor",
@@ -229,10 +232,56 @@ function sharpenEsriExportUrl(url) {
   }
 }
 
-function updateCalculatedDepth(hole) {
+function primaryPipe(hole) {
+  return (hole && Array.isArray(hole.pipes) && hole.pipes[0]) || null;
+}
+
+function isNoUtilityFound(hole) {
+  const value = String((hole && hole.utilityType) || "").trim().toLowerCase();
+  return value === "none"
+    || value === "n/a"
+    || value.includes("no utility")
+    || value.includes("not found")
+    || value.includes("no pipe");
+}
+
+function addUniqueUtility(labels, value) {
+  const label = String(value || "").trim();
+  if (!label) return;
+  if (!labels.some((item) => item.toLowerCase() === label.toLowerCase())) labels.push(label);
+}
+
+function foundUtilityLabel(hole) {
+  if (!hole) return "";
+  if (isNoUtilityFound(hole)) return hole.utilityType || "No Utility Found";
+  const labels = [];
+  (hole.pipes || []).forEach((pipe, index) => {
+    addUniqueUtility(labels, pipe.utilityType || (index === 0 ? hole.utilityType : ""));
+  });
+  if (!labels.length) addUniqueUtility(labels, hole.utilityType);
+  return labels.join(" / ");
+}
+
+function updatePipeDepth(hole, pipe) {
   const ground = numericValue(hole.elevation);
-  const topPipe = numericValue(hole.topPipeElevation);
-  hole.depthTop = ground === null || topPipe === null ? "" : formatDepth(ground - topPipe);
+  const topPipe = numericValue(pipe.topPipeElevation);
+  pipe.depthTop = ground === null || topPipe === null ? "" : formatDepth(ground - topPipe);
+}
+
+function updateCalculatedDepth(hole) {
+  if (!hole) return;
+  const firstPipe = primaryPipe(hole);
+  if (!firstPipe) {
+    const ground = numericValue(hole.elevation);
+    const topPipe = numericValue(hole.topPipeElevation);
+    hole.depthTop = ground === null || topPipe === null ? "" : formatDepth(ground - topPipe);
+    return;
+  }
+
+  updatePipeDepth(hole, firstPipe);
+  (hole.pipes || []).slice(1).forEach((pipe) => updatePipeDepth(hole, pipe));
+  hole.topPipeElevation = firstPipe.topPipeElevation || "";
+  hole.depthTop = firstPipe.depthTop || "";
 }
 
 function normalizeBearing(value) {
@@ -265,6 +314,9 @@ function blankPipe(source = {}) {
     id: source.id || uid(),
     northing: source.northing || "",
     easting: source.easting || "",
+    utilityType: source.utilityType || "",
+    topPipeElevation: hasOwn(source, "topPipeElevation") ? source.topPipeElevation : "",
+    depthTop: hasOwn(source, "depthTop") ? source.depthTop : "",
     utilitySize: source.utilitySize || "",
     material: source.material || "",
     pipeColor: source.pipeColor || "BLUE",
@@ -275,7 +327,9 @@ function blankPipe(source = {}) {
 }
 
 function syncPrimaryPipeLegacy(hole) {
-  const pipe = (hole.pipes && hole.pipes[0]) || blankPipe();
+  const pipe = primaryPipe(hole) || blankPipe();
+  if (!pipe.utilityType && hole.utilityType) pipe.utilityType = hole.utilityType;
+  hole.utilityType = pipe.utilityType || hole.utilityType || "";
   hole.utilitySize = pipe.utilitySize;
   hole.material = pipe.material;
   hole.pipeColor = pipe.pipeColor;
@@ -284,6 +338,8 @@ function syncPrimaryPipeLegacy(hole) {
   hole.pipeEndDistance = pipe.pipeEndDistance;
   hole.northing = pipe.northing;
   hole.easting = pipe.easting;
+  hole.topPipeElevation = pipe.topPipeElevation || "";
+  hole.depthTop = pipe.depthTop || "";
 }
 
 function blankHole(index = state.holes.length + 1) {
@@ -305,7 +361,7 @@ function blankHole(index = state.holes.length + 1) {
     pipeBearing: "",
     pipeStartDistance: "",
     pipeEndDistance: "",
-    pipes: [blankPipe()],
+    pipes: [blankPipe({ utilityType: "Water" })],
     description: "",
     holeNotes: "",
     mapX: null,
@@ -360,10 +416,17 @@ function normalizeProjectData(data) {
     if (!hasOwn(hole, "pipeStartDistance")) hole.pipeStartDistance = hole.pipeDistance || "";
     if (!hasOwn(hole, "pipeEndDistance")) hole.pipeEndDistance = hole.pipeDistance || "";
     if (!Array.isArray(hole.pipes) || !hole.pipes.length) {
-      hole.pipes = [blankPipe(hole)];
+      hole.pipes = [blankPipe({ ...hole, utilityType: hole.utilityType })];
     } else {
       hole.pipes = hole.pipes.map((pipe, index) => blankPipe(index === 0
-        ? { northing: hole.northing, easting: hole.easting, ...pipe }
+        ? {
+          northing: hole.northing,
+          easting: hole.easting,
+          utilityType: hole.utilityType,
+          topPipeElevation: hole.topPipeElevation,
+          depthTop: hole.depthTop,
+          ...pipe,
+        }
         : pipe));
     }
     uppercaseRecordFields(hole, holeFields);
@@ -479,9 +542,21 @@ function bindHoleFields() {
       const hole = selectedHole();
       if (!hole) return;
       hole[field] = syncUppercaseInput(input, field);
+      if (field === "topPipeElevation") {
+        const pipe = primaryPipe(hole);
+        if (pipe) pipe.topPipeElevation = hole.topPipeElevation;
+      }
+      if (field === "utilityType") {
+        const pipe = primaryPipe(hole);
+        if (pipe) pipe.utilityType = hole.utilityType;
+      }
       if (field === "elevation" || field === "topPipeElevation") {
         updateCalculatedDepth(hole);
         $("depthTop").value = hole.depthTop;
+        renderPipeEditor(hole);
+      }
+      if (field === "utilityType") {
+        renderPipeEditor(hole);
       }
       save();
       renderHoleList();
@@ -681,7 +756,7 @@ function renderHoleList() {
   $("holeList").innerHTML = state.holes
     .map((hole) => {
       const selected = hole.id === state.selectedId ? " selected" : "";
-      const utilityPair = [hole.expectedUtility && `Exp: ${hole.expectedUtility}`, hole.utilityType && `Found: ${hole.utilityType}`]
+      const utilityPair = [hole.expectedUtility && `Exp: ${hole.expectedUtility}`, foundUtilityLabel(hole) && `Found: ${foundUtilityLabel(hole)}`]
         .filter(Boolean)
         .join(" / ");
       const details = [utilityPair, hole.depthTop && `${hole.depthTop} ft`]
@@ -718,34 +793,70 @@ function renderHoleForm() {
   renderPhotos(hole);
 }
 
+function utilityTypeOptions(selected, includeNoUtility = false) {
+  const choices = [
+    "Water",
+    "Reclaimed Water",
+    "Sewer",
+    "Storm",
+    "Gas",
+    "Electric",
+    "Telecom",
+    ...(includeNoUtility ? ["No Utility Found"] : []),
+    "Unknown",
+  ];
+  const selectedValue = String(selected || "");
+  const options = [`<option value="">Select utility</option>`];
+  if (selectedValue && !choices.some((choice) => choice.toLowerCase() === selectedValue.toLowerCase())) {
+    options.push(`<option selected>${escapeHtml(selectedValue)}</option>`);
+  }
+  choices.forEach((choice) => {
+    const selectedAttr = choice.toLowerCase() === selectedValue.toLowerCase() ? " selected" : "";
+    options.push(`<option${selectedAttr}>${escapeHtml(choice)}</option>`);
+  });
+  return options.join("");
+}
+
 function renderPipeEditor(hole) {
-  $("pipeList").innerHTML = hole.pipes.map((pipe, index) => `
-    <section class="pipe-card" data-pipe-id="${pipe.id}">
-      <div class="pipe-card-head">
-        <strong>Pipe ${index + 1}</strong>
-        <div class="inline-actions">
-          <button class="pipe-aerial-btn" type="button" data-pipe-id="${pipe.id}">Center Aerial</button>
-          ${hole.pipes.length > 1 ? `<button class="danger remove-pipe-btn" type="button" data-pipe-id="${pipe.id}">Remove</button>` : ""}
+  $("pipeList").innerHTML = hole.pipes.map((pipe, index) => {
+    const title = index === 0
+      ? (isNoUtilityFound(hole) ? "TH Location" : "Pipe 1 / TH Location")
+      : `Pipe ${index + 1}`;
+    const elevationFields = index === 0 ? "" : `
+        <label>Top of pipe elevation<input data-pipe-field="topPipeElevation" value="${escapeHtml(pipe.topPipeElevation)}" inputmode="decimal" placeholder="Top pipe elev."></label>
+        <label>Depth to top of pipe<input data-pipe-field="depthTop" value="${escapeHtml(pipe.depthTop)}" inputmode="decimal" placeholder="Auto" readonly></label>
+    `;
+    return `
+      <section class="pipe-card" data-pipe-id="${pipe.id}">
+        <div class="pipe-card-head">
+          <strong>${escapeHtml(title)}</strong>
+          <div class="inline-actions">
+            <button class="pipe-aerial-btn" type="button" data-pipe-id="${pipe.id}">Center Aerial</button>
+            ${hole.pipes.length > 1 ? `<button class="danger remove-pipe-btn" type="button" data-pipe-id="${pipe.id}">Remove</button>` : ""}
+          </div>
         </div>
-      </div>
-      <div class="form-grid pipe-form-grid">
-        <label>Northing<input data-pipe-field="northing" value="${escapeHtml(pipe.northing)}" inputmode="decimal" placeholder="N"></label>
-        <label>Easting<input data-pipe-field="easting" value="${escapeHtml(pipe.easting)}" inputmode="decimal" placeholder="E"></label>
-        <label>Pipe / line size<input data-pipe-field="utilitySize" value="${escapeHtml(pipe.utilitySize)}" autocomplete="off" placeholder="8 in, 2 in, etc."></label>
-        <label>Material<input data-pipe-field="material" value="${escapeHtml(pipe.material)}" autocomplete="off" placeholder="PVC, DIP, steel"></label>
-        <label>Pipe color<input data-pipe-field="pipeColor" value="${escapeHtml(pipe.pipeColor)}" autocomplete="off" placeholder="Blue, orange, red, etc."></label>
-        <label>Pipe bearing<input data-pipe-field="pipeBearing" value="${escapeHtml(pipe.pipeBearing)}" inputmode="decimal" placeholder="Approx. degrees"></label>
-        <label>Pipe end 1 length<input data-pipe-field="pipeStartDistance" value="${escapeHtml(pipe.pipeStartDistance)}" inputmode="decimal" placeholder="Map length"></label>
-        <label>Pipe end 2 length<input data-pipe-field="pipeEndDistance" value="${escapeHtml(pipe.pipeEndDistance)}" inputmode="decimal" placeholder="Map length"></label>
-      </div>
-    </section>
-  `).join("");
+        <div class="form-grid pipe-form-grid">
+          <label>Northing<input data-pipe-field="northing" value="${escapeHtml(pipe.northing)}" inputmode="decimal" placeholder="N"></label>
+          <label>Easting<input data-pipe-field="easting" value="${escapeHtml(pipe.easting)}" inputmode="decimal" placeholder="E"></label>
+          <label>Utility type<select data-pipe-field="utilityType">${utilityTypeOptions(pipe.utilityType, index === 0)}</select></label>
+          ${elevationFields}
+          <label>Pipe / line size<input data-pipe-field="utilitySize" value="${escapeHtml(pipe.utilitySize)}" autocomplete="off" placeholder="8 in, 2 in, etc."></label>
+          <label>Material<input data-pipe-field="material" value="${escapeHtml(pipe.material)}" autocomplete="off" placeholder="PVC, DIP, steel"></label>
+          <label>Pipe color<input data-pipe-field="pipeColor" value="${escapeHtml(pipe.pipeColor)}" autocomplete="off" placeholder="Blue, orange, red, etc."></label>
+          <label>Pipe bearing<input data-pipe-field="pipeBearing" value="${escapeHtml(pipe.pipeBearing)}" inputmode="decimal" placeholder="Approx. degrees"></label>
+          <label>Pipe end 1 length<input data-pipe-field="pipeStartDistance" value="${escapeHtml(pipe.pipeStartDistance)}" inputmode="decimal" placeholder="Map length"></label>
+          <label>Pipe end 2 length<input data-pipe-field="pipeEndDistance" value="${escapeHtml(pipe.pipeEndDistance)}" inputmode="decimal" placeholder="Map length"></label>
+        </div>
+      </section>
+    `;
+  }).join("");
 }
 
 function addPipe() {
   const hole = selectedHole();
   if (!hole) return;
   hole.pipes.push(blankPipe());
+  updateCalculatedDepth(hole);
   syncPrimaryPipeLegacy(hole);
   save();
   renderPipeEditor(hole);
@@ -757,7 +868,10 @@ function removePipe(id) {
   const hole = selectedHole();
   if (!hole || hole.pipes.length <= 1) return;
   hole.pipes = hole.pipes.filter((pipe) => pipe.id !== id);
+  updateCalculatedDepth(hole);
   syncPrimaryPipeLegacy(hole);
+  $("topPipeElevation").value = hole.topPipeElevation || "";
+  $("depthTop").value = hole.depthTop || "";
   save();
   renderPipeEditor(hole);
   renderPins();
@@ -772,9 +886,25 @@ function updatePipe(event) {
   const pipeId = card && card.dataset.pipeId;
   const pipe = hole && hole.pipes.find((item) => item.id === pipeId);
   if (!pipe) return;
-  pipe[input.dataset.pipeField] = syncUppercaseInput(input, input.dataset.pipeField);
+  const field = input.dataset.pipeField;
+  pipe[field] = syncUppercaseInput(input, field);
+  if (field === "topPipeElevation") {
+    updateCalculatedDepth(hole);
+    const depthInput = card.querySelector('[data-pipe-field="depthTop"]');
+    if (depthInput) depthInput.value = pipe.depthTop || "";
+  }
+  if (field === "utilityType" && pipe === primaryPipe(hole)) {
+    hole.utilityType = pipe.utilityType || "";
+    $("utilityType").value = hole.utilityType;
+  }
   syncPrimaryPipeLegacy(hole);
+  if (field === "utilityType" && pipe === primaryPipe(hole)) {
+    renderPipeEditor(hole);
+  }
+  $("topPipeElevation").value = hole.topPipeElevation || "";
+  $("depthTop").value = hole.depthTop || "";
   save();
+  renderHoleList();
   renderPins();
   renderReport();
 }
@@ -840,7 +970,7 @@ function renderPins() {
 }
 
 function mapUtilityLabel(hole) {
-  return hole.utilityType || hole.holeName || "TH";
+  return foundUtilityLabel(hole) || hole.holeName || "TH";
 }
 
 function mapPointLabel(hole) {
@@ -880,7 +1010,8 @@ function markerGraphic(hole, isReport, labelZoom = 1) {
   const crossClass = isReport ? "report-marker-crosshair" : "marker-crosshair";
   const radius = 11 * labelZoom;
   const arm = 18 * labelZoom;
-  const pipeLines = (hole.pipes || []).map((pipe) => pipeSvgLine(pipe, lineClass, "px")).join("");
+  const pipes = isNoUtilityFound(hole) ? [] : (hole.pipes || []);
+  const pipeLines = pipes.map((pipe) => pipeSvgLine(pipe, lineClass, "px")).join("");
 
   return `
     <span class="${graphicClass}" style="--marker-zoom:${labelZoom}" aria-hidden="true">
@@ -897,7 +1028,8 @@ function markerGraphic(hole, isReport, labelZoom = 1) {
 }
 
 function markerLabelStyle(hole, labelZoom = 1) {
-  const pipe = (hole.pipes || []).find((item) => normalizeBearing(item.pipeBearing) !== null);
+  const pipes = isNoUtilityFound(hole) ? [] : (hole.pipes || []);
+  const pipe = pipes.find((item) => normalizeBearing(item.pipeBearing) !== null);
   const bearing = pipe ? normalizeBearing(pipe.pipeBearing) : null;
   let nx = 0.82;
   let ny = -0.57;
@@ -1014,7 +1146,9 @@ async function aerialFromCoordinates(pipeId) {
   const northing = numericValue(pipe.northing);
   const easting = numericValue(pipe.easting);
   if (northing === null || easting === null) {
-    $("mapTip").textContent = "Enter northing and easting for this pipe first.";
+    $("mapTip").textContent = isNoUtilityFound(hole) && pipe === primaryPipe(hole)
+      ? "Enter northing and easting for this test hole first."
+      : "Enter northing and easting for this pipe first.";
     return;
   }
 
@@ -1044,7 +1178,10 @@ async function aerialFromCoordinates(pipeId) {
   renderPins();
   renderReport();
   const pipeNumber = hole.pipes.findIndex((item) => item.id === pipe.id) + 1;
-  $("mapTip").innerHTML = `Aerial centered on <b id="selectedHoleName">${escapeHtml(hole.holeName)}</b>, Pipe ${pipeNumber}`;
+  const locationLabel = isNoUtilityFound(hole) && pipe === primaryPipe(hole)
+    ? "test hole location"
+    : `Pipe ${pipeNumber}`;
+  $("mapTip").innerHTML = `Aerial centered on <b id="selectedHoleName">${escapeHtml(hole.holeName)}</b>, ${locationLabel}`;
 }
 
 function esriExportUrl(service, bbox, transparent) {
@@ -1229,10 +1366,18 @@ function buildHoleDataSheet(hole, projectTitle, sheetNumber, totalSheets) {
 }
 
 function holeDataRows(hole) {
-  const pipeRows = hole.pipes.map((pipe, index) => `
+  const firstPipe = primaryPipe(hole) || {};
+  const noUtilityRows = `
     <tr>
-      <th>Pipe ${index + 1}</th><td>${escapeHtml([pipe.utilitySize, pipe.material].filter(Boolean).join(" / "))}</td>
-      <th>Direction</th><td>${escapeHtml(pipeDirectionPair(pipe))}</td>
+      <th>TH Northing</th><td>${escapeHtml(formatOneDecimal(firstPipe.northing || hole.northing))}</td>
+      <th>TH Easting</th><td>${escapeHtml(formatOneDecimal(firstPipe.easting || hole.easting))}</td>
+      <th>Ground Elev.</th><td>${escapeHtml(formatOneDecimal(hole.elevation))}</td>
+    </tr>
+  `;
+  const pipeRows = (hole.pipes || []).map((pipe, index) => `
+    <tr>
+      <th>Pipe ${index + 1}</th><td>${escapeHtml(pipe.utilityType || (index === 0 ? hole.utilityType : ""))}</td>
+      <th>Size / Material</th><td>${escapeHtml([pipe.utilitySize, pipe.material].filter(Boolean).join(" / "))}</td>
       <th>Color</th><td>${escapeHtml(pipeColorLabel(pipe))}</td>
     </tr>
     <tr>
@@ -1240,22 +1385,23 @@ function holeDataRows(hole) {
       <th>Pipe ${index + 1} Easting</th><td>${escapeHtml(formatOneDecimal(pipe.easting))}</td>
       <th>Ground Elev.</th><td>${escapeHtml(formatOneDecimal(hole.elevation))}</td>
     </tr>
+    <tr>
+      <th>Pipe ${index + 1} Top Elev.</th><td>${escapeHtml(formatOneDecimal(pipe.topPipeElevation))}</td>
+      <th>Pipe ${index + 1} Depth</th><td>${escapeHtml(formatOneDecimal(pipe.depthTop))}</td>
+      <th>Direction</th><td>${escapeHtml(pipeDirectionPair(pipe))}</td>
+    </tr>
   `).join("");
   return `
     <tr>
       <th>Test Hole</th><td>${escapeHtml(hole.holeName)}</td>
       <th>Expected Utility</th><td>${escapeHtml(hole.expectedUtility)}</td>
-      <th>Found Utility</th><td>${escapeHtml(hole.utilityType)}</td>
+      <th>Found Utility</th><td>${escapeHtml(foundUtilityLabel(hole))}</td>
     </tr>
     <tr>
       <th>Surface</th><td>${escapeHtml(hole.surfaceType)}</td>
       <th>Method</th><td colspan="3">${escapeHtml(hole.method)}</td>
     </tr>
-    ${pipeRows}
-    <tr>
-      <th>Top Pipe Elev.</th><td>${escapeHtml(formatOneDecimal(hole.topPipeElevation))}</td>
-      <th>Depth</th><td colspan="3">${escapeHtml(formatOneDecimal(hole.depthTop))}</td>
-    </tr>
+    ${isNoUtilityFound(hole) ? noUtilityRows : pipeRows}
     <tr>
       <th>Description</th><td colspan="5">${escapeHtml(hole.description)}</td>
     </tr>
@@ -1407,6 +1553,14 @@ function titleBlock(sheetTitle, projectTitle, sheetNumber, totalSheets) {
   `;
 }
 
+function pipeCsvSummary(hole) {
+  if (isNoUtilityFound(hole)) {
+    const pipe = primaryPipe(hole) || {};
+    return `Test hole location: N ${formatOneDecimal(pipe.northing || hole.northing)} E ${formatOneDecimal(pipe.easting || hole.easting)} Ground ${formatOneDecimal(hole.elevation)}`.trim();
+  }
+  return (hole.pipes || []).map((pipe, index) => `Pipe ${index + 1}: ${pipe.utilityType || (index === 0 ? hole.utilityType : "")} N ${formatOneDecimal(pipe.northing)} E ${formatOneDecimal(pipe.easting)} Top ${formatOneDecimal(pipe.topPipeElevation)} Depth ${formatOneDecimal(pipe.depthTop)} ${pipe.utilitySize} ${pipe.material} ${pipeColorLabel(pipe)} ${pipeDirectionPair(pipe)}`.trim()).join(" | ");
+}
+
 function exportCsv() {
   const headers = [
     "holeName",
@@ -1429,7 +1583,7 @@ function exportCsv() {
     "mapY",
   ];
   const rows = [headers, ...state.holes.map((hole) => headers.map((header) => header === "pipes"
-    ? hole.pipes.map((pipe, index) => `Pipe ${index + 1}: N ${formatOneDecimal(pipe.northing)} E ${formatOneDecimal(pipe.easting)} ${pipe.utilitySize} ${pipe.material} ${pipeColorLabel(pipe)} ${pipeDirectionPair(pipe)}`.trim()).join(" | ")
+    ? pipeCsvSummary(hole)
     : (hole[header] === null || hole[header] === undefined ? "" : reportFieldValue(header, hole[header]))))];
   download(
     `${state.project.projectNumber || "test-holes"}.csv`,
@@ -1476,39 +1630,45 @@ function exportProjectFile() {
 
 function exportGeoJson() {
   const features = state.holes
-    .flatMap((hole) => hole.pipes.map((pipe, index) => {
-      const lat = numericValue(pipe.northing);
-      const lng = numericValue(pipe.easting);
-      if (lat === null || lng === null) return null;
-      return {
-        type: "Feature",
-        geometry: {
-          type: "Point",
-          coordinates: [lng, lat],
-        },
-        properties: {
-          name: `${hole.holeName} Pipe ${index + 1}`,
-          testHole: hole.holeName,
-          pipeNumber: index + 1,
-          expectedUtility: hole.expectedUtility,
-          foundUtility: hole.utilityType,
-          size: pipe.utilitySize,
-          material: pipe.material,
-          pipeColor: pipeColorLabel(pipe),
-          bearing: pipe.pipeBearing,
-          direction: pipeDirectionPair(pipe),
-          end1Length: pipe.pipeStartDistance,
-          end2Length: pipe.pipeEndDistance,
-          groundElevation: hole.elevation,
-          topPipeElevation: hole.topPipeElevation,
-          depthTop: hole.depthTop,
-          description: hole.description,
-          notes: hole.holeNotes,
-          projectNumber: state.project.projectNumber,
-          projectName: state.project.projectName,
-        },
-      };
-    }))
+    .flatMap((hole) => {
+      const noUtility = isNoUtilityFound(hole);
+      const pipes = noUtility ? [primaryPipe(hole)].filter(Boolean) : (hole.pipes || []);
+      return pipes.map((pipe, index) => {
+        const lat = numericValue(pipe.northing);
+        const lng = numericValue(pipe.easting);
+        if (lat === null || lng === null) return null;
+        return {
+          type: "Feature",
+          geometry: {
+            type: "Point",
+            coordinates: [lng, lat],
+          },
+          properties: {
+            name: noUtility ? `${hole.holeName} Test Hole Location` : `${hole.holeName} Pipe ${index + 1}`,
+            testHole: hole.holeName,
+            pipeNumber: noUtility ? "" : index + 1,
+            expectedUtility: hole.expectedUtility,
+            foundUtility: noUtility ? hole.utilityType : (pipe.utilityType || (index === 0 ? hole.utilityType : "")),
+            foundUtilities: foundUtilityLabel(hole),
+            pipeUtility: noUtility ? "" : (pipe.utilityType || (index === 0 ? hole.utilityType : "")),
+            size: noUtility ? "" : pipe.utilitySize,
+            material: noUtility ? "" : pipe.material,
+            pipeColor: noUtility ? "" : pipeColorLabel(pipe),
+            bearing: noUtility ? "" : pipe.pipeBearing,
+            direction: noUtility ? "" : pipeDirectionPair(pipe),
+            end1Length: noUtility ? "" : pipe.pipeStartDistance,
+            end2Length: noUtility ? "" : pipe.pipeEndDistance,
+            groundElevation: hole.elevation,
+            topPipeElevation: noUtility ? "" : pipe.topPipeElevation,
+            depthTop: noUtility ? "" : pipe.depthTop,
+            description: hole.description,
+            notes: hole.holeNotes,
+            projectNumber: state.project.projectNumber,
+            projectName: state.project.projectName,
+          },
+        };
+      });
+    })
     .filter(Boolean);
 
   download(
