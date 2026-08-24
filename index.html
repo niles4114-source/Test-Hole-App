@@ -5,15 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#1f4f47">
     <title>Test Hole Collector</title>
-    <link rel="manifest" href="manifest.json?v=125">
-    <link rel="stylesheet" href="styles.css?v=125">
+    <link rel="manifest" href="manifest.json?v=127">
+    <link rel="stylesheet" href="styles.css?v=127">
   </head>
   <body>
     <header class="topbar">
       <div>
         <p class="eyebrow">Field collection</p>
         <h1>Test Hole Collector</h1>
-        <span id="appVersion" class="app-version">v125</span>
+        <span id="appVersion" class="app-version">v127</span>
       </div>
       <div class="topbar-actions">
         <button id="addHoleBtn" class="primary" type="button">Add TH</button>
@@ -81,6 +81,10 @@
           <label>
             Custom WKID
             <input id="customCoordinateSystem" inputmode="numeric" placeholder="e.g. 2236">
+          </label>
+          <label>
+            Vertical datum
+            <input id="verticalDatum" autocomplete="off" placeholder="NAVD88">
           </label>
           <label>
             Aerial style
@@ -211,17 +215,17 @@
               <input id="elevation" inputmode="decimal" placeholder="Ground elev.">
             </label>
             <label>
-              Top of pipe elevation
-              <input id="topPipeElevation" inputmode="decimal" placeholder="Top pipe elev.">
+              Top of utility elevation
+              <input id="topPipeElevation" inputmode="decimal" placeholder="Top utility elev.">
             </label>
             <label>
-              Depth to top of pipe
+              Depth to top of utility
               <input id="depthTop" inputmode="decimal" placeholder="Auto" readonly>
             </label>
             <div class="wide pipe-editor">
               <div class="pipe-editor-head">
-                <h3>Pipes</h3>
-                <button id="addPipeBtn" type="button">Add Pipe</button>
+                <h3>Utilities</h3>
+                <button id="addPipeBtn" type="button">Add Utility</button>
               </div>
               <div id="pipeList" class="pipe-list"></div>
             </div>
@@ -271,6 +275,6 @@
 
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
-    <script src="app.js?v=125"></script>
+    <script src="app.js?v=127"></script>
   </body>
 </html>

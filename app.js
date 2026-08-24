@@ -1,6 +1,6 @@
 const STORAGE_KEY = "test-hole-collector-v1";
 const PROJECT_INDEX_KEY = "test-hole-project-index-v1";
-const APP_VERSION = "v125";
+const APP_VERSION = "v127";
 const ACTIVE_PROJECT_KEY = "test-hole-active-project-v1";
 const PROJECT_DB_NAME = "test-hole-collector-projects-v1";
 const PROJECT_STORE = "projects";
@@ -22,6 +22,7 @@ const fields = [
   "weather",
   "coordinateSystem",
   "customCoordinateSystem",
+  "verticalDatum",
   "mapStyle",
   "location",
   "mapLink",
@@ -85,6 +86,14 @@ const oneDecimalReportFields = new Set([
   "depthTop",
 ]);
 
+const coordinateSystemLabels = {
+  "4326": "Lat/Long WGS84 (EPSG:4326)",
+  "2236": "NAD83 Florida East ftUS (EPSG:2236)",
+  "2237": "NAD83 Florida West ftUS (EPSG:2237)",
+  "2238": "NAD83 Florida North ftUS (EPSG:2238)",
+  "3857": "Web Mercator meters (EPSG:3857)",
+};
+
 const state = {
   project: defaultProject(),
   mapImage: "",
@@ -140,6 +149,7 @@ function defaultProject() {
     weather: "",
     coordinateSystem: "2236",
     customCoordinateSystem: "",
+    verticalDatum: "NAVD88",
     mapStyle: "imagery",
     location: "",
     mapLink: "",
@@ -823,11 +833,11 @@ function utilityTypeOptions(selected, includeNoUtility = false) {
 function renderPipeEditor(hole) {
   $("pipeList").innerHTML = hole.pipes.map((pipe, index) => {
     const title = index === 0
-      ? (isNoUtilityFound(hole) ? "TH Location" : "Pipe 1 / TH Location")
-      : `Pipe ${index + 1}`;
+      ? (isNoUtilityFound(hole) ? "TH Location" : "Utility 1 / TH Location")
+      : `Utility ${index + 1}`;
     const elevationFields = index === 0 ? "" : `
-        <label>Top of pipe elevation<input data-pipe-field="topPipeElevation" value="${escapeHtml(pipe.topPipeElevation)}" inputmode="decimal" placeholder="Top pipe elev."></label>
-        <label>Depth to top of pipe<input data-pipe-field="depthTop" value="${escapeHtml(pipe.depthTop)}" inputmode="decimal" placeholder="Auto" readonly></label>
+        <label>Top of utility elevation<input data-pipe-field="topPipeElevation" value="${escapeHtml(pipe.topPipeElevation)}" inputmode="decimal" placeholder="Top utility elev."></label>
+        <label>Depth to top of utility<input data-pipe-field="depthTop" value="${escapeHtml(pipe.depthTop)}" inputmode="decimal" placeholder="Auto" readonly></label>
     `;
     return `
       <section class="pipe-card" data-pipe-id="${pipe.id}">
@@ -843,12 +853,12 @@ function renderPipeEditor(hole) {
           <label>Easting<input data-pipe-field="easting" value="${escapeHtml(pipe.easting)}" inputmode="decimal" placeholder="E"></label>
           <label>Utility type<select data-pipe-field="utilityType">${utilityTypeOptions(pipe.utilityType, index === 0)}</select></label>
           ${elevationFields}
-          <label>Pipe / line size<input data-pipe-field="utilitySize" value="${escapeHtml(pipe.utilitySize)}" autocomplete="off" placeholder="8 in, 2 in, etc."></label>
+          <label>Utility / line size<input data-pipe-field="utilitySize" value="${escapeHtml(pipe.utilitySize)}" autocomplete="off" placeholder="8 in, 2 in, etc."></label>
           <label>Material<input data-pipe-field="material" value="${escapeHtml(pipe.material)}" autocomplete="off" placeholder="PVC, DIP, steel"></label>
-          <label>Pipe color<input data-pipe-field="pipeColor" value="${escapeHtml(pipe.pipeColor)}" autocomplete="off" placeholder="Blue, orange, red, etc."></label>
-          <label>Pipe bearing<input data-pipe-field="pipeBearing" value="${escapeHtml(pipe.pipeBearing)}" inputmode="decimal" placeholder="Approx. degrees"></label>
-          <label>Pipe end 1 length<input data-pipe-field="pipeStartDistance" value="${escapeHtml(pipe.pipeStartDistance)}" inputmode="decimal" placeholder="Map length"></label>
-          <label>Pipe end 2 length<input data-pipe-field="pipeEndDistance" value="${escapeHtml(pipe.pipeEndDistance)}" inputmode="decimal" placeholder="Map length"></label>
+          <label>Utility color<input data-pipe-field="pipeColor" value="${escapeHtml(pipe.pipeColor)}" autocomplete="off" placeholder="Blue, orange, red, etc."></label>
+          <label>Utility bearing<input data-pipe-field="pipeBearing" value="${escapeHtml(pipe.pipeBearing)}" inputmode="decimal" placeholder="Approx. degrees"></label>
+          <label>Utility end 1 length<input data-pipe-field="pipeStartDistance" value="${escapeHtml(pipe.pipeStartDistance)}" inputmode="decimal" placeholder="Map length"></label>
+          <label>Utility end 2 length<input data-pipe-field="pipeEndDistance" value="${escapeHtml(pipe.pipeEndDistance)}" inputmode="decimal" placeholder="Map length"></label>
         </div>
       </section>
     `;
@@ -1107,6 +1117,19 @@ function projectCoordinateWkid() {
   return selected === "custom" ? (state.project.customCoordinateSystem || "").trim() : selected;
 }
 
+function horizontalDatumLabel() {
+  const selected = state.project.coordinateSystem || "2236";
+  if (selected === "custom") {
+    const custom = (state.project.customCoordinateSystem || "").trim();
+    return custom ? `Custom WKID ${custom}` : "Custom WKID";
+  }
+  return coordinateSystemLabels[selected] || selected;
+}
+
+function verticalDatumLabel() {
+  return state.project.verticalDatum || "NAVD88";
+}
+
 async function convertToLatLong(easting, northing) {
   const wkid = projectCoordinateWkid();
   if (!wkid) throw new Error("Choose a coordinate system first.");
@@ -1151,7 +1174,7 @@ async function aerialFromCoordinates(pipeId) {
   if (northing === null || easting === null) {
     $("mapTip").textContent = isNoUtilityFound(hole) && pipe === primaryPipe(hole)
       ? "Enter northing and easting for this test hole first."
-      : "Enter northing and easting for this pipe first.";
+      : "Enter northing and easting for this utility first.";
     return;
   }
 
@@ -1192,7 +1215,7 @@ async function aerialFromCoordinates(pipeId) {
   const pipeNumber = hole.pipes.findIndex((item) => item.id === pipe.id) + 1;
   const locationLabel = isNoUtilityFound(hole) && pipe === primaryPipe(hole)
     ? "test hole location"
-    : `Pipe ${pipeNumber}`;
+    : `Utility ${pipeNumber}`;
   const saveLabel = aerialStored ? " and saved on this sheet" : "";
   $("mapTip").innerHTML = `Aerial centered${saveLabel} on <b id="selectedHoleName">${escapeHtml(hole.holeName)}</b>, ${locationLabel}`;
 }
@@ -1497,18 +1520,18 @@ function holeDataRows(hole) {
   `;
   const pipeRows = (hole.pipes || []).map((pipe, index) => `
     <tr>
-      <th>Pipe ${index + 1}</th><td>${escapeHtml(pipe.utilityType || (index === 0 ? hole.utilityType : ""))}</td>
+      <th>Utility ${index + 1}</th><td>${escapeHtml(pipe.utilityType || (index === 0 ? hole.utilityType : ""))}</td>
       <th>Size / Material</th><td>${escapeHtml([pipe.utilitySize, pipe.material].filter(Boolean).join(" / "))}</td>
       <th>Color</th><td>${escapeHtml(pipeColorLabel(pipe))}</td>
     </tr>
     <tr>
-      <th>Pipe ${index + 1} Northing</th><td>${escapeHtml(formatOneDecimal(pipe.northing))}</td>
-      <th>Pipe ${index + 1} Easting</th><td>${escapeHtml(formatOneDecimal(pipe.easting))}</td>
+      <th>Utility ${index + 1} Northing</th><td>${escapeHtml(formatOneDecimal(pipe.northing))}</td>
+      <th>Utility ${index + 1} Easting</th><td>${escapeHtml(formatOneDecimal(pipe.easting))}</td>
       <th>Ground Elev.</th><td>${escapeHtml(formatOneDecimal(hole.elevation))}</td>
     </tr>
     <tr>
-      <th>Pipe ${index + 1} Top Elev.</th><td>${escapeHtml(formatOneDecimal(pipe.topPipeElevation))}</td>
-      <th>Pipe ${index + 1} Depth</th><td>${escapeHtml(formatOneDecimal(pipe.depthTop))}</td>
+      <th>Utility ${index + 1} Top Elev.</th><td>${escapeHtml(formatOneDecimal(pipe.topPipeElevation))}</td>
+      <th>Utility ${index + 1} Depth</th><td>${escapeHtml(formatOneDecimal(pipe.depthTop))}</td>
       <th>Direction</th><td>${escapeHtml(pipeDirectionPair(pipe))}</td>
     </tr>
   `).join("");
@@ -1527,7 +1550,8 @@ function holeDataRows(hole) {
       <th>Description</th><td colspan="5">${escapeHtml(hole.description)}</td>
     </tr>
     <tr>
-      <th>Field Notes</th><td colspan="5">${escapeHtml(hole.holeNotes)}</td>
+      <th>Horizontal Datum</th><td colspan="2">${escapeHtml(horizontalDatumLabel())}</td>
+      <th>Vertical Datum</th><td colspan="2">${escapeHtml(verticalDatumLabel())}</td>
     </tr>
   `;
 }
@@ -1674,38 +1698,41 @@ function titleBlock(sheetTitle, projectTitle, sheetNumber, totalSheets) {
   `;
 }
 
-function pipeCsvSummary(hole) {
+function utilityCsvSummary(hole) {
   if (isNoUtilityFound(hole)) {
     const pipe = primaryPipe(hole) || {};
     return `Test hole location: N ${formatOneDecimal(pipe.northing || hole.northing)} E ${formatOneDecimal(pipe.easting || hole.easting)} Ground ${formatOneDecimal(hole.elevation)}`.trim();
   }
-  return (hole.pipes || []).map((pipe, index) => `Pipe ${index + 1}: ${pipe.utilityType || (index === 0 ? hole.utilityType : "")} N ${formatOneDecimal(pipe.northing)} E ${formatOneDecimal(pipe.easting)} Top ${formatOneDecimal(pipe.topPipeElevation)} Depth ${formatOneDecimal(pipe.depthTop)} ${pipe.utilitySize} ${pipe.material} ${pipeColorLabel(pipe)} ${pipeDirectionPair(pipe)}`.trim()).join(" | ");
+  return (hole.pipes || []).map((pipe, index) => `Utility ${index + 1}: ${pipe.utilityType || (index === 0 ? hole.utilityType : "")} N ${formatOneDecimal(pipe.northing)} E ${formatOneDecimal(pipe.easting)} Top ${formatOneDecimal(pipe.topPipeElevation)} Depth ${formatOneDecimal(pipe.depthTop)} ${pipe.utilitySize} ${pipe.material} ${pipeColorLabel(pipe)} ${pipeDirectionPair(pipe)}`.trim()).join(" | ");
 }
 
 function exportCsv() {
-  const headers = [
-    "holeName",
-    "expectedUtility",
-    "utilityType",
-    "surfaceType",
-    "method",
-    "northing",
-    "easting",
-    "elevation",
-    "topPipeElevation",
-    "depthTop",
-    "utilitySize",
-    "material",
-    "pipeColor",
-    "pipes",
-    "description",
-    "holeNotes",
-    "mapX",
-    "mapY",
+  const columns = [
+    { key: "holeName" },
+    { key: "expectedUtility" },
+    { key: "utilityType" },
+    { key: "surfaceType" },
+    { key: "method" },
+    { key: "northing" },
+    { key: "easting" },
+    { key: "elevation" },
+    { key: "topPipeElevation", label: "topUtilityElevation" },
+    { key: "depthTop" },
+    { key: "utilitySize" },
+    { key: "material" },
+    { key: "pipeColor", label: "utilityColor" },
+    { key: "pipes", label: "utilities" },
+    { key: "description" },
+    { key: "holeNotes" },
+    { key: "mapX" },
+    { key: "mapY" },
   ];
-  const rows = [headers, ...state.holes.map((hole) => headers.map((header) => header === "pipes"
-    ? pipeCsvSummary(hole)
-    : (hole[header] === null || hole[header] === undefined ? "" : reportFieldValue(header, hole[header]))))];
+  const rows = [
+    columns.map((column) => column.label || column.key),
+    ...state.holes.map((hole) => columns.map(({ key }) => key === "pipes"
+      ? utilityCsvSummary(hole)
+      : (hole[key] === null || hole[key] === undefined ? "" : reportFieldValue(key, hole[key])))),
+  ];
   download(
     `${state.project.projectNumber || "test-holes"}.csv`,
     rows.map((row) => row.map(csvCell).join(",")).join("\n"),
@@ -1765,22 +1792,22 @@ function exportGeoJson() {
             coordinates: [lng, lat],
           },
           properties: {
-            name: noUtility ? `${hole.holeName} Test Hole Location` : `${hole.holeName} Pipe ${index + 1}`,
+            name: noUtility ? `${hole.holeName} Test Hole Location` : `${hole.holeName} Utility ${index + 1}`,
             testHole: hole.holeName,
-            pipeNumber: noUtility ? "" : index + 1,
+            utilityNumber: noUtility ? "" : index + 1,
             expectedUtility: hole.expectedUtility,
             foundUtility: noUtility ? hole.utilityType : (pipe.utilityType || (index === 0 ? hole.utilityType : "")),
             foundUtilities: foundUtilityLabel(hole),
-            pipeUtility: noUtility ? "" : (pipe.utilityType || (index === 0 ? hole.utilityType : "")),
+            utility: noUtility ? "" : (pipe.utilityType || (index === 0 ? hole.utilityType : "")),
             size: noUtility ? "" : pipe.utilitySize,
             material: noUtility ? "" : pipe.material,
-            pipeColor: noUtility ? "" : pipeColorLabel(pipe),
+            utilityColor: noUtility ? "" : pipeColorLabel(pipe),
             bearing: noUtility ? "" : pipe.pipeBearing,
             direction: noUtility ? "" : pipeDirectionPair(pipe),
             end1Length: noUtility ? "" : pipe.pipeStartDistance,
             end2Length: noUtility ? "" : pipe.pipeEndDistance,
             groundElevation: hole.elevation,
-            topPipeElevation: noUtility ? "" : pipe.topPipeElevation,
+            topUtilityElevation: noUtility ? "" : pipe.topPipeElevation,
             depthTop: noUtility ? "" : pipe.depthTop,
             description: hole.description,
             notes: hole.holeNotes,
