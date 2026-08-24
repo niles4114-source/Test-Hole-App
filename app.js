@@ -1,5 +1,6 @@
 const STORAGE_KEY = "test-hole-collector-v1";
 const PROJECT_INDEX_KEY = "test-hole-project-index-v1";
+const APP_VERSION = "v116";
 const ACTIVE_PROJECT_KEY = "test-hole-active-project-v1";
 const PROJECT_DB_NAME = "test-hole-collector-projects-v1";
 const PROJECT_STORE = "projects";
@@ -831,7 +832,7 @@ function renderPins() {
       return `
         <span class="th-marker${selected}" style="left:${hole.mapX}%;top:${hole.mapY}%;--marker-zoom:${labelZoom}">
           ${markerGraphic(hole, false, labelZoom)}
-          <span class="th-label">${mapPointLabel(hole)}</span>
+          <span class="th-label" style="${markerLabelStyle(hole, labelZoom)}">${mapPointLabel(hole)}</span>
         </span>
       `;
     })
@@ -893,6 +894,38 @@ function markerGraphic(hole, isReport, labelZoom = 1) {
       </svg>
     </span>
   `;
+}
+
+function markerLabelStyle(hole, labelZoom = 1) {
+  const pipe = (hole.pipes || []).find((item) => normalizeBearing(item.pipeBearing) !== null);
+  const bearing = pipe ? normalizeBearing(pipe.pipeBearing) : null;
+  let nx = 0.82;
+  let ny = -0.57;
+
+  if (bearing !== null) {
+    const rad = bearing * Math.PI / 180;
+    const dx = Math.sin(rad);
+    const dy = -Math.cos(rad);
+    const optionA = { x: -dy, y: dx };
+    const optionB = { x: dy, y: -dx };
+    const preferB = optionB.x > optionA.x || (Math.abs(optionB.x - optionA.x) < 0.01 && optionB.y < optionA.y);
+    nx = preferB ? optionB.x : optionA.x;
+    ny = preferB ? optionB.y : optionA.y;
+  }
+
+  const labelTextWidth = Math.max(
+    String(hole.holeName || "TH").length,
+    String(mapUtilityLabel(hole) || "").length,
+    4,
+  );
+  const labelWidth = (labelTextWidth * 8 + 22) * labelZoom;
+  const labelHeight = 40 * labelZoom;
+  const crosshairRadius = 24 * labelZoom;
+  const gap = 8 * labelZoom;
+  const support = (Math.abs(nx) * labelWidth / 2) + (Math.abs(ny) * labelHeight / 2);
+  const offset = support + crosshairRadius + gap;
+
+  return `--label-x:${(nx * offset).toFixed(1)}px;--label-y:${(ny * offset).toFixed(1)}px;`;
 }
 
 function pipeOverlay(pipe, className, unit, labelZoom = 1, anchored = false) {
@@ -1182,7 +1215,7 @@ function buildHoleDataSheet(hole, projectTitle, sheetNumber, totalSheets) {
             <div class="report-map-layer" style="${reportMapLayerStyle(hole, mapZoom)}">
               ${mapImage ? `<img src="${mapImage}" alt="">` : `<div class="map-placeholder"><strong>Aerial image / location map</strong><span>Generate or upload aerial for this test hole</span></div>`}
               ${mapLabelImage ? `<img class="report-label-image" src="${mapLabelImage}" alt="">` : ""}
-              ${Number.isFinite(hole.mapX) && Number.isFinite(hole.mapY) ? `<span class="report-th-marker" style="left:${hole.mapX}%;top:${hole.mapY}%;--marker-zoom:${markerZoom(mapZoom)}">${markerGraphic(hole, true, markerZoom(mapZoom))}<span class="report-th-label">${mapPointLabel(hole)}</span></span>` : ""}
+              ${Number.isFinite(hole.mapX) && Number.isFinite(hole.mapY) ? `<span class="report-th-marker" style="left:${hole.mapX}%;top:${hole.mapY}%;--marker-zoom:${markerZoom(mapZoom)}">${markerGraphic(hole, true, markerZoom(mapZoom))}<span class="report-th-label" style="${markerLabelStyle(hole, markerZoom(mapZoom))}">${mapPointLabel(hole)}</span></span>` : ""}
             </div>
           </div>
         </div>
@@ -1694,6 +1727,8 @@ function bindEvents() {
 
 async function initializeApp() {
   const addButton = $("addHoleBtn");
+  const appVersion = $("appVersion");
+  if (appVersion) appVersion.textContent = APP_VERSION;
   if (addButton) addButton.disabled = true;
 
   try {
