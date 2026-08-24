@@ -1646,6 +1646,17 @@ textarea {
     height: 100% !important;
     overflow: hidden !important;
   }
+
+  .print-report .report-map-layer::after {
+    content: none !important;
+    display: none !important;
+  }
+
+  .print-report .report-map-layer img {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
 }
 
 @media print {
