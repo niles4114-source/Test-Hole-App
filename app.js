@@ -1,6 +1,6 @@
 const STORAGE_KEY = "test-hole-collector-v1";
 const PROJECT_INDEX_KEY = "test-hole-project-index-v1";
-const APP_VERSION = "v124";
+const APP_VERSION = "v125";
 const ACTIVE_PROJECT_KEY = "test-hole-active-project-v1";
 const PROJECT_DB_NAME = "test-hole-collector-projects-v1";
 const PROJECT_STORE = "projects";
@@ -96,6 +96,8 @@ const state = {
 let projectRecords = [];
 let activeProjectId = null;
 let projectDbPromise;
+const storedMapImageCache = new Map();
+const pendingStoredMapHoles = new Set();
 
 function openProjectDb() {
   if (!projectDbPromise) {
@@ -697,6 +699,7 @@ function renderMapImage() {
   canvas.classList.toggle("has-image", Boolean(mapImage));
   canvas.classList.toggle("has-labels", Boolean(mapLabelImage));
   requestAnimationFrame(centerMapOnSelectedHole);
+  saveSelectedRemoteMapImages(hole);
 }
 
 function setMapZoom(nextZoom) {
@@ -1168,11 +1171,20 @@ async function aerialFromCoordinates(pipeId) {
   const { lat, lng } = latLng;
   const delta = 0.0018;
   const bbox = [lng - delta, lat - delta, lng + delta, lat + delta].join(",");
-  hole.mapImage = esriExportUrl("World_Imagery", bbox, false);
-  hole.mapLabelImage = state.project.mapStyle === "hybrid" ? esriExportUrl("Reference/World_Boundaries_and_Places", bbox, true) : "";
+  const mapImageUrl = esriExportUrl("World_Imagery", bbox, false);
+  const mapLabelImageUrl = state.project.mapStyle === "hybrid" ? esriExportUrl("Reference/World_Boundaries_and_Places", bbox, true) : "";
+  hole.mapImage = mapImageUrl;
+  hole.mapLabelImage = mapLabelImageUrl;
   hole.mapZoom = 2;
   hole.mapX = 50;
   hole.mapY = 50;
+  $("mapTip").textContent = "Saving aerial image to this sheet...";
+  let aerialStored = false;
+  try {
+    aerialStored = await saveRemoteMapImagesToHole(hole);
+  } catch {
+    $("mapTip").textContent = "Aerial loaded, but it could not be saved to this sheet for offline reuse.";
+  }
   save();
   renderMapImage();
   renderPins();
@@ -1181,7 +1193,8 @@ async function aerialFromCoordinates(pipeId) {
   const locationLabel = isNoUtilityFound(hole) && pipe === primaryPipe(hole)
     ? "test hole location"
     : `Pipe ${pipeNumber}`;
-  $("mapTip").innerHTML = `Aerial centered on <b id="selectedHoleName">${escapeHtml(hole.holeName)}</b>, ${locationLabel}`;
+  const saveLabel = aerialStored ? " and saved on this sheet" : "";
+  $("mapTip").innerHTML = `Aerial centered${saveLabel} on <b id="selectedHoleName">${escapeHtml(hole.holeName)}</b>, ${locationLabel}`;
 }
 
 function esriExportUrl(service, bbox, transparent) {
@@ -1205,6 +1218,72 @@ function fileToDataUrl(file) {
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
+}
+
+function isRemoteImageUrl(src) {
+  return /^https?:\/\//i.test(String(src || ""));
+}
+
+function downloadImageAsDataUrl(src) {
+  if (!isRemoteImageUrl(src)) return Promise.resolve(src || "");
+  if (!storedMapImageCache.has(src)) {
+    const request = fetch(src, { cache: "force-cache" })
+      .then((response) => {
+        if (!response.ok) throw new Error("Aerial image download failed.");
+        return response.blob();
+      })
+      .then(fileToDataUrl)
+      .finally(() => storedMapImageCache.delete(src));
+    storedMapImageCache.set(src, request);
+  }
+  return storedMapImageCache.get(src);
+}
+
+async function saveRemoteMapImagesToHole(hole) {
+  if (!hole) return false;
+  const sources = [
+    ["mapImage", hole.mapImage],
+    ["mapLabelImage", hole.mapLabelImage],
+  ].filter(([, src]) => isRemoteImageUrl(src));
+  if (!sources.length) return false;
+
+  const results = await Promise.allSettled(sources.map(([, src]) => downloadImageAsDataUrl(src)));
+  let changed = false;
+  let savedCount = 0;
+  results.forEach((result, index) => {
+    if (result.status !== "fulfilled" || !result.value) return;
+    const [field] = sources[index];
+    hole[field] = result.value;
+    changed = true;
+    savedCount += 1;
+  });
+  if (!savedCount) throw new Error("Aerial image could not be saved to this sheet.");
+  return changed;
+}
+
+async function saveSelectedRemoteMapImages(hole) {
+  if (!hole || pendingStoredMapHoles.has(hole.id)) return;
+  if (!isRemoteImageUrl(hole.mapImage) && !isRemoteImageUrl(hole.mapLabelImage)) return;
+
+  pendingStoredMapHoles.add(hole.id);
+  try {
+    if (hole.id === state.selectedId) $("mapTip").textContent = "Saving aerial image to this sheet...";
+    const changed = await saveRemoteMapImagesToHole(hole);
+    if (changed) {
+      save();
+      if (hole.id === state.selectedId) {
+        renderMapImage();
+        renderPins();
+      }
+      renderReport();
+    }
+  } catch {
+    if (hole.id === state.selectedId) {
+      $("mapTip").textContent = "Aerial loaded, but it could not be saved to this sheet for offline reuse.";
+    }
+  } finally {
+    pendingStoredMapHoles.delete(hole.id);
+  }
 }
 
 function loadImageElement(src) {
