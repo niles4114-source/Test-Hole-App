@@ -3,6 +3,13 @@ const PROJECT_INDEX_KEY = "test-hole-project-index-v1";
 const ACTIVE_PROJECT_KEY = "test-hole-active-project-v1";
 const PROJECT_DB_NAME = "test-hole-collector-projects-v1";
 const PROJECT_STORE = "projects";
+const AERIAL_EXPORT_SIZE = "3200,2286";
+const AERIAL_EXPORT_DPI = "192";
+const PDF_CAPTURE_SCALE = 4;
+const PDF_IMAGE_TYPE = "image/png";
+const PDF_IMAGE_FORMAT = "PNG";
+const PHOTO_MAX_DIMENSION = 2400;
+const PHOTO_JPEG_QUALITY = 0.86;
 
 const fields = [
   "projectFileName",
@@ -32,6 +39,47 @@ const holeFields = [
   "description",
   "holeNotes",
 ];
+
+const pipeFields = [
+  "northing",
+  "easting",
+  "utilitySize",
+  "material",
+  "pipeColor",
+  "pipeBearing",
+  "pipeStartDistance",
+  "pipeEndDistance",
+];
+
+const uppercaseExemptFields = new Set([
+  "coordinateSystem",
+  "customCoordinateSystem",
+  "fieldDate",
+  "mapLink",
+  "mapStyle",
+  "northing",
+  "easting",
+  "elevation",
+  "topPipeElevation",
+  "depthTop",
+  "expectedUtility",
+  "utilityType",
+  "surfaceType",
+  "method",
+  "pipeBearing",
+  "pipeStartDistance",
+  "pipeEndDistance",
+  "mapImage",
+  "mapLabelImage",
+]);
+
+const oneDecimalReportFields = new Set([
+  "northing",
+  "easting",
+  "elevation",
+  "topPipeElevation",
+  "depthTop",
+]);
 
 const state = {
   project: defaultProject(),
@@ -119,7 +167,65 @@ function numericValue(value) {
 }
 
 function formatDepth(value) {
-  return Number.isInteger(value) ? String(value) : value.toFixed(2);
+  return value.toFixed(1);
+}
+
+function formatOneDecimal(value) {
+  const number = numericValue(value);
+  return number === null ? "" : number.toFixed(1);
+}
+
+function reportFieldValue(field, value) {
+  return oneDecimalReportFields.has(field) ? formatOneDecimal(value) : value;
+}
+
+function uppercaseValue(value) {
+  return typeof value === "string" ? value.toUpperCase() : value;
+}
+
+function uppercaseFieldValue(field, value) {
+  return uppercaseExemptFields.has(field) ? value : uppercaseValue(value);
+}
+
+function shouldUppercaseInput(input, field) {
+  if (!input || uppercaseExemptFields.has(field)) return false;
+  if (input.tagName === "SELECT") return false;
+  if (["date", "file", "number"].includes(input.type)) return false;
+  return true;
+}
+
+function syncUppercaseInput(input, field) {
+  if (!shouldUppercaseInput(input, field)) return input.value;
+  const selectionStart = input.selectionStart;
+  const selectionEnd = input.selectionEnd;
+  const upper = uppercaseValue(input.value);
+  if (input.value !== upper) {
+    input.value = upper;
+    try {
+      input.setSelectionRange(selectionStart, selectionEnd);
+    } catch {}
+  }
+  return input.value;
+}
+
+function uppercaseRecordFields(record, fieldNames) {
+  if (!record) return;
+  fieldNames.forEach((field) => {
+    if (hasOwn(record, field)) record[field] = uppercaseFieldValue(field, record[field]);
+  });
+}
+
+function sharpenEsriExportUrl(url) {
+  if (!url || !url.startsWith("https://services.arcgisonline.com/ArcGIS/rest/services/")) return url;
+  try {
+    const parsed = new URL(url);
+    if (!parsed.pathname.endsWith("/MapServer/export")) return url;
+    parsed.searchParams.set("size", AERIAL_EXPORT_SIZE);
+    parsed.searchParams.set("dpi", AERIAL_EXPORT_DPI);
+    return parsed.toString();
+  } catch {
+    return url;
+  }
 }
 
 function updateCalculatedDepth(hole) {
@@ -160,7 +266,7 @@ function blankPipe(source = {}) {
     easting: source.easting || "",
     utilitySize: source.utilitySize || "",
     material: source.material || "",
-    pipeColor: source.pipeColor || "Blue",
+    pipeColor: source.pipeColor || "BLUE",
     pipeBearing: source.pipeBearing || "",
     pipeStartDistance: source.pipeStartDistance || source.pipeDistance || "",
     pipeEndDistance: source.pipeEndDistance || source.pipeDistance || "",
@@ -194,7 +300,7 @@ function blankHole(index = state.holes.length + 1) {
     depthTop: "",
     utilitySize: "",
     material: "",
-    pipeColor: "Blue",
+    pipeColor: "BLUE",
     pipeBearing: "",
     pipeStartDistance: "",
     pipeEndDistance: "",
@@ -227,10 +333,21 @@ function blankProjectState() {
   return projectState;
 }
 
+function normalizePhotoRecord(photo, index) {
+  const source = typeof photo === "string" ? { src: photo } : (photo || {});
+  return {
+    id: source.id || uid(),
+    name: source.name || `Photo ${index + 1}`,
+    caption: uppercaseValue(source.caption || ""),
+    src: source.src || "",
+  };
+}
+
 function normalizeProjectData(data) {
   const normalized = data || blankProjectState();
   normalized.project = { ...defaultProject(), ...(normalized.project || {}) };
-  normalized.mapImage = normalized.mapImage || "";
+  uppercaseRecordFields(normalized.project, fields);
+  normalized.mapImage = sharpenEsriExportUrl(normalized.mapImage || "");
   normalized.mapZoom = normalized.mapZoom || 1;
   normalized.holes = Array.isArray(normalized.holes) ? normalized.holes : [];
   if (!normalized.holes.length) normalized.holes = [blankHole(1)];
@@ -248,10 +365,15 @@ function normalizeProjectData(data) {
         ? { northing: hole.northing, easting: hole.easting, ...pipe }
         : pipe));
     }
+    uppercaseRecordFields(hole, holeFields);
+    hole.pipes.forEach((pipe) => uppercaseRecordFields(pipe, pipeFields));
     syncPrimaryPipeLegacy(hole);
-    if (!hasOwn(hole, "mapImage")) hole.mapImage = "";
-    if (!hasOwn(hole, "mapLabelImage")) hole.mapLabelImage = "";
+    hole.mapImage = sharpenEsriExportUrl(hasOwn(hole, "mapImage") ? hole.mapImage : "");
+    hole.mapLabelImage = sharpenEsriExportUrl(hasOwn(hole, "mapLabelImage") ? hole.mapLabelImage : "");
     if (!hasOwn(hole, "mapZoom")) hole.mapZoom = 1;
+    hole.photos = Array.isArray(hole.photos)
+      ? hole.photos.map(normalizePhotoRecord).filter((photo) => photo.src)
+      : [];
     updateCalculatedDepth(hole);
   });
   normalized.selectedId = normalized.selectedId || (normalized.holes[0] && normalized.holes[0].id) || null;
@@ -342,7 +464,7 @@ function bindProjectFields() {
   fields.forEach((field) => {
     const input = $(field);
     input.addEventListener("input", () => {
-      state.project[field] = input.value;
+      state.project[field] = syncUppercaseInput(input, field);
       save();
       renderReport();
     });
@@ -355,7 +477,7 @@ function bindHoleFields() {
     input.addEventListener("input", () => {
       const hole = selectedHole();
       if (!hole) return;
-      hole[field] = input.value;
+      hole[field] = syncUppercaseInput(input, field);
       if (field === "elevation" || field === "topPipeElevation") {
         updateCalculatedDepth(hole);
         $("depthTop").value = hole.depthTop;
@@ -649,7 +771,7 @@ function updatePipe(event) {
   const pipeId = card && card.dataset.pipeId;
   const pipe = hole && hole.pipes.find((item) => item.id === pipeId);
   if (!pipe) return;
-  pipe[input.dataset.pipeField] = input.value;
+  pipe[input.dataset.pipeField] = syncUppercaseInput(input, input.dataset.pipeField);
   syncPrimaryPipeLegacy(hole);
   save();
   renderPins();
@@ -660,13 +782,41 @@ function renderPhotos(hole) {
   $("photoGrid").innerHTML = (hole.photos || [])
     .map(
       (photo, index) => `
-        <figure>
-          <img src="${photo.src}" alt="${escapeHtml(photo.name || `Photo ${index + 1}`)}">
-          <figcaption>${escapeHtml(photo.name || `Photo ${index + 1}`)}</figcaption>
+        <figure data-photo-id="${photo.id}">
+          <img src="${photo.src}" alt="${escapeHtml(photoDisplayCaption(hole, photo, index))}">
+          <figcaption>
+            <label class="photo-caption-field">
+              Caption
+              <input data-photo-caption="${photo.id}" value="${escapeHtml(photo.caption || "")}" autocomplete="off" placeholder="${escapeHtml(defaultPhotoCaption(hole, index))}">
+            </label>
+            <button class="remove-photo-btn danger" type="button" data-photo-id="${photo.id}">Remove</button>
+          </figcaption>
         </figure>
       `,
     )
     .join("");
+}
+
+function updatePhotoCaption(event) {
+  const input = event.target.closest("[data-photo-caption]");
+  if (!input) return;
+  const hole = selectedHole();
+  const photo = hole && (hole.photos || []).find((item) => item.id === input.dataset.photoCaption);
+  if (!photo) return;
+  photo.caption = syncUppercaseInput(input, "caption");
+  save();
+  renderReport();
+}
+
+function removePhoto(event) {
+  const button = event.target.closest(".remove-photo-btn");
+  if (!button) return;
+  const hole = selectedHole();
+  if (!hole) return;
+  hole.photos = (hole.photos || []).filter((photo) => photo.id !== button.dataset.photoId);
+  save();
+  renderPhotos(hole);
+  renderReport();
 }
 
 function renderPins() {
@@ -827,7 +977,8 @@ function esriExportUrl(service, bbox, transparent) {
     bbox,
     bboxSR: "4326",
     imageSR: "4326",
-    size: "1400,1000",
+    size: AERIAL_EXPORT_SIZE,
+    dpi: AERIAL_EXPORT_DPI,
     format: "png32",
     transparent: transparent ? "true" : "false",
     f: "image",
@@ -844,6 +995,57 @@ function fileToDataUrl(file) {
   });
 }
 
+function loadImageElement(src) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = reject;
+    image.src = src;
+  });
+}
+
+function canvasToDataUrl(canvas, type, quality) {
+  return new Promise((resolve) => {
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        resolve(canvas.toDataURL(type, quality));
+        return;
+      }
+      fileToDataUrl(blob).then(resolve);
+    }, type, quality);
+  });
+}
+
+async function loadOrientedPhoto(file) {
+  if (window.createImageBitmap) {
+    try {
+      return await createImageBitmap(file, { imageOrientation: "from-image" });
+    } catch {}
+  }
+  return loadImageElement(await fileToDataUrl(file));
+}
+
+async function optimizedPhotoDataUrl(file) {
+  try {
+    const image = await loadOrientedPhoto(file);
+    const width = image.width || image.naturalWidth;
+    const height = image.height || image.naturalHeight;
+    const scale = Math.min(1, PHOTO_MAX_DIMENSION / Math.max(width, height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(width * scale));
+    canvas.height = Math.max(1, Math.round(height * scale));
+
+    const context = canvas.getContext("2d");
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = "high";
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    if (image.close) image.close();
+    return canvasToDataUrl(canvas, "image/jpeg", PHOTO_JPEG_QUALITY);
+  } catch {
+    return fileToDataUrl(file);
+  }
+}
+
 async function loadMapImage(event) {
   const hole = selectedHole();
   const [file] = event.target.files;
@@ -857,14 +1059,27 @@ async function loadMapImage(event) {
   event.target.value = "";
 }
 
+function defaultPhotoCaption(hole, index) {
+  return uppercaseValue(`${hole.holeName || "TEST HOLE"} - PHOTO ${index + 1}`);
+}
+
+function photoDisplayCaption(hole, photo, index) {
+  return photo.caption || defaultPhotoCaption(hole, index);
+}
+
 async function addPhotos(event) {
   const hole = selectedHole();
   if (!hole) return;
   const files = Array.from(event.target.files || []);
+  if (!files.length) return;
+  const startIndex = (hole.photos || []).length;
+  $("saveState").textContent = "Processing photos...";
   const photos = await Promise.all(
-    files.map(async (file) => ({
+    files.map(async (file, index) => ({
+      id: uid(),
       name: file.name,
-      src: await fileToDataUrl(file),
+      caption: "",
+      src: await optimizedPhotoDataUrl(file),
     })),
   );
   hole.photos = [...(hole.photos || []), ...photos];
@@ -946,8 +1161,8 @@ function holeDataRows(hole) {
       <th>Color</th><td>${escapeHtml(pipeColorLabel(pipe))}</td>
     </tr>
     <tr>
-      <th>Pipe ${index + 1} Northing</th><td>${escapeHtml(pipe.northing)}</td>
-      <th>Pipe ${index + 1} Easting</th><td>${escapeHtml(pipe.easting)}</td>
+      <th>Pipe ${index + 1} Northing</th><td>${escapeHtml(formatOneDecimal(pipe.northing))}</td>
+      <th>Pipe ${index + 1} Easting</th><td>${escapeHtml(formatOneDecimal(pipe.easting))}</td>
       <th></th><td></td>
     </tr>
   `).join("");
@@ -959,10 +1174,10 @@ function holeDataRows(hole) {
     </tr>
     <tr>
       <th>Surface</th><td>${escapeHtml(hole.surfaceType)}</td>
-      <th>Ground Elev.</th><td>${escapeHtml(hole.elevation)}</td>
-      <th>Top Pipe Elev.</th><td>${escapeHtml(hole.topPipeElevation)}</td>
+      <th>Ground Elev.</th><td>${escapeHtml(formatOneDecimal(hole.elevation))}</td>
+      <th>Top Pipe Elev.</th><td>${escapeHtml(formatOneDecimal(hole.topPipeElevation))}</td>
     </tr>
-    <tr><th>Depth / Method</th><td colspan="5">${escapeHtml([hole.depthTop, hole.method].filter(Boolean).join(" / "))}</td></tr>
+    <tr><th>Depth / Method</th><td colspan="5">${escapeHtml([formatOneDecimal(hole.depthTop), hole.method].filter(Boolean).join(" / "))}</td></tr>
     ${pipeRows}
     <tr>
       <th>Description</th><td colspan="5">${escapeHtml(hole.description)}</td>
@@ -1071,8 +1286,8 @@ function buildHolePhotoSheet(hole, projectTitle, sheetNumber, totalSheets) {
     .map(
       (photo, index) => `
         <figure>
-          <img src="${photo.src}" alt="${escapeHtml(photo.name || "Test hole photo")}">
-          <figcaption>${escapeHtml(hole.holeName || "Test Hole")} - Photo ${index + 1}</figcaption>
+          <img src="${photo.src}" alt="${escapeHtml(photoDisplayCaption(hole, photo, index))}">
+          <figcaption>${escapeHtml(photoDisplayCaption(hole, photo, index))}</figcaption>
         </figure>
       `,
     )
@@ -1138,8 +1353,8 @@ function exportCsv() {
     "mapY",
   ];
   const rows = [headers, ...state.holes.map((hole) => headers.map((header) => header === "pipes"
-    ? hole.pipes.map((pipe, index) => `Pipe ${index + 1}: N ${pipe.northing} E ${pipe.easting} ${pipe.utilitySize} ${pipe.material} ${pipeColorLabel(pipe)} ${pipeDirectionPair(pipe)}`.trim()).join(" | ")
-    : (hole[header] === null || hole[header] === undefined ? "" : hole[header])))];
+    ? hole.pipes.map((pipe, index) => `Pipe ${index + 1}: N ${formatOneDecimal(pipe.northing)} E ${formatOneDecimal(pipe.easting)} ${pipe.utilitySize} ${pipe.material} ${pipeColorLabel(pipe)} ${pipeDirectionPair(pipe)}`.trim()).join(" | ")
+    : (hole[header] === null || hole[header] === undefined ? "" : reportFieldValue(header, hole[header]))))];
   download(
     `${state.project.projectNumber || "test-holes"}.csv`,
     rows.map((row) => row.map(csvCell).join(",")).join("\n"),
@@ -1296,7 +1511,7 @@ async function savePdf() {
       const bounds = sheet.getBoundingClientRect();
       const canvas = await window.html2canvas(sheet, {
         backgroundColor: "#ffffff",
-        scale: 2,
+        scale: PDF_CAPTURE_SCALE,
         useCORS: true,
         logging: false,
         width: Math.ceil(bounds.width),
@@ -1306,7 +1521,7 @@ async function savePdf() {
         scrollY: 0,
       });
       if (index > 0) pdf.addPage("letter", "portrait");
-      pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, 8.5, 11, undefined, "FAST");
+      pdf.addImage(canvas.toDataURL(PDF_IMAGE_TYPE), PDF_IMAGE_FORMAT, 0, 0, 8.5, 11, undefined, "NONE");
     }
 
     const filename = `${safeFilePart(state.project.projectFileName || state.project.projectNumber || state.project.projectName)}.pdf`;
@@ -1406,6 +1621,8 @@ function bindEvents() {
     renderReport();
   });
   $("photoRollInput").addEventListener("change", addPhotos);
+  $("photoGrid").addEventListener("input", updatePhotoCaption);
+  $("photoGrid").addEventListener("click", removePhoto);
   $("addPipeBtn").addEventListener("click", addPipe);
   $("pipeList").addEventListener("input", updatePipe);
   $("pipeList").addEventListener("click", (event) => {

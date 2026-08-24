@@ -461,9 +461,31 @@ textarea {
 }
 
 .photo-grid figcaption {
-  padding: 6px;
+  display: grid;
+  gap: 6px;
+  padding: 8px;
   color: var(--muted);
   font-size: 11px;
+}
+
+.photo-caption-field {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.photo-caption-field input {
+  min-height: 34px;
+  padding: 7px;
+  font-size: 13px;
+}
+
+.remove-photo-btn {
+  min-height: 34px;
+  padding: 6px 8px;
+  font-size: 12px;
 }
 
 .report-preview {
@@ -904,12 +926,13 @@ textarea {
 
 .photo-page-grid figure {
   display: grid;
-  grid-template-rows: 1fr auto;
+  grid-template-rows: minmax(0, 1fr) 0.32in;
+  gap: 0.04in;
   min-height: 0;
   margin: 0;
-  border: 1px solid #111;
-  background: #fff;
-  overflow: hidden;
+  border: 0;
+  background: transparent;
+  overflow: visible;
 }
 
 .photo-page-grid img {
@@ -919,13 +942,20 @@ textarea {
   object-fit: contain;
   object-position: center center;
   background: #fff;
+  border: 1px solid #111;
 }
 
 .photo-page-grid figcaption {
-  border-top: 1px solid #111;
-  padding: 5px;
-  font-size: 10px;
+  display: flex;
+  align-items: center;
+  min-height: 0.32in;
+  border: 1px solid #111;
+  background: #f2f2f2;
+  padding: 0 8px;
+  color: #111;
+  font-size: 11px;
   font-weight: 800;
+  line-height: 1.15;
   text-transform: uppercase;
 }
 
@@ -1560,4 +1590,36 @@ textarea {
   object-fit: contain !important;
   object-position: center center !important;
   background: #fff !important;
+  border: 1px solid #111 !important;
+}
+
+.photo-page-grid figcaption,
+.print-report .photo-page-grid figcaption,
+.pdf-render-stage .photo-page-grid figcaption {
+  display: flex !important;
+  align-items: center !important;
+  min-height: 0.32in !important;
+  border: 1px solid #111 !important;
+  background: #f2f2f2 !important;
+  padding: 0 8px !important;
+  color: #111 !important;
+  font-size: 11px !important;
+  font-weight: 800 !important;
+  line-height: 1.15 !important;
+  text-transform: uppercase !important;
+}
+
+body,
+button,
+input,
+select,
+textarea,
+.sheet {
+  text-transform: uppercase;
+}
+
+#mapLink,
+input[type="date"],
+input[type="file"] {
+  text-transform: none;
 }
