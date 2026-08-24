@@ -858,13 +858,12 @@ function pipeVectorCoordinates(pipe, unit) {
   const rad = bearing * Math.PI / 180;
   const dx = Math.sin(rad);
   const dy = -Math.cos(rad);
-  const center = 500;
 
   return {
-    x1: center - dx * halfPx,
-    y1: center - dy * halfPx,
-    x2: center + dx * halfPx,
-    y2: center + dy * halfPx,
+    x1: -dx * halfPx,
+    y1: -dy * halfPx,
+    x2: dx * halfPx,
+    y2: dy * halfPx,
   };
 }
 
@@ -880,17 +879,16 @@ function markerGraphic(hole, isReport, labelZoom = 1) {
   const crossClass = isReport ? "report-marker-crosshair" : "marker-crosshair";
   const radius = 11 * labelZoom;
   const arm = 18 * labelZoom;
-  const center = 500;
   const pipeLines = (hole.pipes || []).map((pipe) => pipeSvgLine(pipe, lineClass, "px")).join("");
 
   return `
     <span class="${graphicClass}" style="--marker-zoom:${labelZoom}" aria-hidden="true">
-      <svg viewBox="0 0 1000 1000" focusable="false">
+      <svg viewBox="-500 -500 1000 1000" focusable="false">
         ${pipeLines}
         <g class="${crossClass}">
-          <circle cx="${center}" cy="${center}" r="${radius}"></circle>
-          <line x1="${center - arm}" y1="${center}" x2="${center + arm}" y2="${center}"></line>
-          <line x1="${center}" y1="${center - arm}" x2="${center}" y2="${center + arm}"></line>
+          <circle cx="0" cy="0" r="${radius}"></circle>
+          <line x1="${-arm}" y1="0" x2="${arm}" y2="0"></line>
+          <line x1="0" y1="${-arm}" x2="0" y2="${arm}"></line>
         </g>
       </svg>
     </span>

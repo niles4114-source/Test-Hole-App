@@ -1294,12 +1294,12 @@ textarea {
 .marker-graphic,
 .report-marker-graphic {
   position: absolute !important;
-  left: 0 !important;
-  top: 0 !important;
+  left: -500px !important;
+  top: -500px !important;
   width: 1000px !important;
   height: 1000px !important;
-  transform: translate(-50%, -50%) !important;
-  transform-origin: center center !important;
+  transform: none !important;
+  transform-origin: 0 0 !important;
   pointer-events: none !important;
   overflow: visible !important;
   z-index: 2 !important;
@@ -1402,14 +1402,14 @@ textarea {
 .th-label,
 .report-th-label {
   position: absolute !important;
-  left: calc(34px * var(--marker-zoom, var(--map-zoom, 1))) !important;
+  left: 112px !important;
   top: calc(-26px * var(--marker-zoom, var(--map-zoom, 1))) !important;
   z-index: 4 !important;
   pointer-events: none !important;
 }
 
 .report-th-label {
-  left: calc(34px * var(--marker-zoom, 1)) !important;
+  left: 112px !important;
   top: calc(-26px * var(--marker-zoom, 1)) !important;
 }
 
