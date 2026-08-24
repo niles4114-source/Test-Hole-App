@@ -1,6 +1,6 @@
 const STORAGE_KEY = "test-hole-collector-v1";
 const PROJECT_INDEX_KEY = "test-hole-project-index-v1";
-const APP_VERSION = "v119";
+const APP_VERSION = "v120";
 const ACTIVE_PROJECT_KEY = "test-hole-active-project-v1";
 const PROJECT_DB_NAME = "test-hole-collector-projects-v1";
 const PROJECT_STORE = "projects";
@@ -1320,8 +1320,8 @@ function pipeColorValue(hole) {
     reclaimed: "#8a2be2",
     black: "#000000",
     white: "#ffffff",
-    gray: "#808080",
-    grey: "#808080",
+    gray: "#000000",
+    grey: "#000000",
     brown: "#9c4f2f"
   };
 
