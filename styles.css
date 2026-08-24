@@ -988,7 +988,14 @@ textarea {
 }
 
 .print-report {
-  display: none;
+  position: fixed;
+  top: 0;
+  left: -10000px;
+  display: block;
+  width: 8.5in;
+  height: auto;
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .pdf-render-stage {
@@ -1585,10 +1592,15 @@ textarea {
   }
 
   .print-report {
+    position: static !important;
+    left: auto !important;
+    top: auto !important;
     display: block !important;
     width: 8.5in !important;
     margin: 0 !important;
     padding: 0 !important;
+    visibility: visible !important;
+    pointer-events: auto !important;
   }
 
   .sheet {

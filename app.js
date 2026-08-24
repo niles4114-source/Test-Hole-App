@@ -1,6 +1,6 @@
 const STORAGE_KEY = "test-hole-collector-v1";
 const PROJECT_INDEX_KEY = "test-hole-project-index-v1";
-const APP_VERSION = "v122";
+const APP_VERSION = "v123";
 const ACTIVE_PROJECT_KEY = "test-hole-active-project-v1";
 const PROJECT_DB_NAME = "test-hole-collector-projects-v1";
 const PROJECT_STORE = "projects";
@@ -1316,6 +1316,48 @@ function renderReport() {
   $("printReport").innerHTML = report;
 }
 
+function waitForImageLoad(image) {
+  if (!image || !image.getAttribute("src")) return Promise.resolve();
+  if (image.complete && image.naturalWidth > 0) return Promise.resolve();
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      resolve();
+    };
+    const timeout = setTimeout(finish, 5000);
+    image.addEventListener("load", finish, { once: true });
+    image.addEventListener("error", finish, { once: true });
+  });
+}
+
+async function waitForReportImages(root) {
+  const images = Array.from((root || document).querySelectorAll("img"))
+    .filter((image) => image.getAttribute("src"));
+  await Promise.all(images.map(waitForImageLoad));
+  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+}
+
+async function printCurrentReport(button) {
+  const originalText = button && button.textContent;
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Preparing Print...";
+  }
+  renderReport();
+  try {
+    await waitForReportImages($("printReport"));
+    window.print();
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = originalText;
+    }
+  }
+}
+
 function buildReport() {
   const title = [state.project.projectNumber, state.project.projectName].filter(Boolean).join(" - ") || "Test Hole Report";
   const hole = selectedHole() || state.holes[0] || blankHole(1);
@@ -1694,8 +1736,7 @@ function openProjectMap() {
   window.open(url, "_blank", "noopener");
 }
 
-function emailPdf() {
-  renderReport();
+async function emailPdf() {
   const subject = encodeURIComponent(`${state.project.projectNumber || "Test Hole"} PDF Deliverable`);
   const body = encodeURIComponent(
     [
@@ -1707,7 +1748,7 @@ function emailPdf() {
       .filter(Boolean)
       .join("\n"),
   );
-  window.print();
+  await printCurrentReport($("emailPdfBtn"));
   window.location.href = `mailto:?subject=${subject}&body=${body}`;
 }
 
@@ -1872,10 +1913,7 @@ function bindEvents() {
   });
   $("clearPhotosBtn").addEventListener("click", clearPhotos);
   $("refreshReportBtn").addEventListener("click", renderReport);
-  $("printBtn").addEventListener("click", () => {
-    renderReport();
-    window.print();
-  });
+  $("printBtn").addEventListener("click", () => printCurrentReport($("printBtn")));
   $("pdfBtn").addEventListener("click", savePdf);
   $("csvBtn").addEventListener("click", exportCsv);
   $("geoJsonBtn").addEventListener("click", exportGeoJson);

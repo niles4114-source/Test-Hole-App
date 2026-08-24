@@ -1,10 +1,10 @@
-const CACHE_NAME = "test-hole-collector-v122";
+const CACHE_NAME = "test-hole-collector-v123";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./styles.css?v=122",
-  "./app.js?v=122",
-  "./manifest.json?v=122",
+  "./styles.css?v=123",
+  "./app.js?v=123",
+  "./manifest.json?v=123",
   "./degrove-logo.jpg",
   "./icon.svg",
 ];
