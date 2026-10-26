@@ -1,6 +1,6 @@
 const STORAGE_KEY = "test-hole-collector-v1";
 const PROJECT_INDEX_KEY = "test-hole-project-index-v1";
-const APP_VERSION = "v127";
+const APP_VERSION = "v128";
 const ACTIVE_PROJECT_KEY = "test-hole-active-project-v1";
 const PROJECT_DB_NAME = "test-hole-collector-projects-v1";
 const PROJECT_STORE = "projects";
@@ -1021,20 +1021,25 @@ function markerGraphic(hole, isReport, labelZoom = 1) {
   const graphicClass = isReport ? "report-marker-graphic" : "marker-graphic";
   const lineClass = isReport ? "report-pipe-vector-line" : "pipe-vector-line";
   const crossClass = isReport ? "report-marker-crosshair" : "marker-crosshair";
-  const radius = 11 * labelZoom;
-  const arm = 18 * labelZoom;
+  const radius = 5.5;
+  const arm = 9;
+  const gap = 3;
   const pipes = isNoUtilityFound(hole) ? [] : (hole.pipes || []);
   const pipeLines = pipes.map((pipe) => pipeSvgLine(pipe, lineClass, "px")).join("");
+  const crosshair = `
+    <circle cx="0" cy="0" r="${radius}"></circle>
+    <line x1="${-arm}" y1="0" x2="${-gap}" y2="0"></line>
+    <line x1="${gap}" y1="0" x2="${arm}" y2="0"></line>
+    <line x1="0" y1="${-arm}" x2="0" y2="${-gap}"></line>
+    <line x1="0" y1="${gap}" x2="0" y2="${arm}"></line>
+  `;
 
   return `
     <span class="${graphicClass}" style="--marker-zoom:${labelZoom}" aria-hidden="true">
       <svg viewBox="-500 -500 1000 1000" focusable="false">
+        <g class="${crossClass} marker-crosshair-outline">${crosshair}</g>
+        <g class="${crossClass}">${crosshair}</g>
         ${pipeLines}
-        <g class="${crossClass}">
-          <circle cx="0" cy="0" r="${radius}"></circle>
-          <line x1="${-arm}" y1="0" x2="${arm}" y2="0"></line>
-          <line x1="0" y1="${-arm}" x2="0" y2="${arm}"></line>
-        </g>
       </svg>
     </span>
   `;
@@ -1065,7 +1070,7 @@ function markerLabelStyle(hole, labelZoom = 1) {
   );
   const labelWidth = (labelTextWidth * 8 + 22) * labelZoom;
   const labelHeight = 40 * labelZoom;
-  const crosshairRadius = 24 * labelZoom;
+  const crosshairRadius = 12;
   const gap = 8 * labelZoom;
   const support = (Math.abs(nx) * labelWidth / 2) + (Math.abs(ny) * labelHeight / 2);
   const offset = support + crosshairRadius + gap;
@@ -1444,6 +1449,8 @@ async function waitForReportImages(root) {
 
 async function printCurrentReport(button) {
   const originalText = button && button.textContent;
+  const originalTitle = document.title;
+  const printTitle = reportPdfFilename().replace(/\.pdf$/i, "");
   if (button) {
     button.disabled = true;
     button.textContent = "Preparing Print...";
@@ -1451,8 +1458,10 @@ async function printCurrentReport(button) {
   renderReport();
   try {
     await waitForReportImages($("printReport"));
+    document.title = printTitle;
     window.print();
   } finally {
+    document.title = originalTitle;
     if (button) {
       button.disabled = false;
       button.textContent = originalText;
@@ -1761,6 +1770,13 @@ function safeFilePart(value) {
     .slice(0, 80) || "test-hole-project";
 }
 
+function reportPdfFilename() {
+  const hole = selectedHole() || state.holes[0];
+  const holeName = safeFilePart((hole && hole.holeName) || "TH");
+  const projectName = safeFilePart(state.project.projectFileName || state.project.projectNumber || state.project.projectName);
+  return `${holeName}-${projectName}.pdf`;
+}
+
 function exportProjectFile() {
   saveActiveProjectNow();
   const payload = {
@@ -1872,6 +1888,7 @@ async function savePdf() {
 
   const button = $("pdfBtn");
   const originalText = button.textContent;
+  const filename = reportPdfFilename();
   button.disabled = true;
   button.textContent = "Creating PDF...";
   renderReport();
@@ -1885,12 +1902,13 @@ async function savePdf() {
   try {
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF({ orientation: "portrait", unit: "in", format: "letter", compress: true });
+    pdf.setProperties({ title: filename.replace(/\.pdf$/i, "") });
 
     for (let index = 0; index < sourceSheets.length; index += 1) {
       stage.replaceChildren(sourceSheets[index].cloneNode(true));
-      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
       const sheet = stage.firstElementChild;
+      await waitForReportImages(sheet);
       const bounds = sheet.getBoundingClientRect();
       const canvas = await window.html2canvas(sheet, {
         backgroundColor: "#ffffff",
@@ -1904,10 +1922,9 @@ async function savePdf() {
         scrollY: 0,
       });
       if (index > 0) pdf.addPage("letter", "portrait");
-      pdf.addImage(canvas.toDataURL(PDF_IMAGE_TYPE), PDF_IMAGE_FORMAT, 0, 0, 8.5, 11, undefined, "NONE");
+      pdf.addImage(canvas.toDataURL(PDF_IMAGE_TYPE), PDF_IMAGE_FORMAT, 0, 0, 8.5, 11, undefined, "MEDIUM");
     }
 
-    const filename = `${safeFilePart(state.project.projectFileName || state.project.projectNumber || state.project.projectName)}.pdf`;
     const blob = pdf.output("blob");
     const url = URL.createObjectURL(blob);
 

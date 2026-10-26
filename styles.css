@@ -1363,7 +1363,14 @@ textarea {
 .report-marker-crosshair line {
   fill: none !important;
   stroke: var(--accent, #1f4f47) !important;
-  stroke-width: 5px !important;
+  stroke-width: 1.25px !important;
+  vector-effect: non-scaling-stroke;
+}
+
+.marker-crosshair-outline circle,
+.marker-crosshair-outline line {
+  stroke: #fff !important;
+  stroke-width: 3.25px !important;
   vector-effect: non-scaling-stroke;
 }
 
@@ -1457,8 +1464,7 @@ textarea {
 /* Reuse old label card style inside new label */
 .th-label b,
 .report-th-label b {
-  display: inline-grid;
-  gap: 1px;
+  display: block;
   min-width: calc(34px * var(--marker-zoom, var(--map-zoom, 1)));
   padding: calc(3px * var(--marker-zoom, var(--map-zoom, 1))) calc(6px * var(--marker-zoom, var(--map-zoom, 1)));
   border: 2px solid #fff;
@@ -1469,7 +1475,15 @@ textarea {
   box-shadow: 0 0 0 1px #111;
   font-size: calc(12px * var(--marker-zoom, var(--map-zoom, 1)));
   font-weight: 800;
+  line-height: 1.2;
   white-space: nowrap;
+}
+
+.th-label b span,
+.report-th-label b span {
+  position: relative;
+  z-index: 1;
+  display: block;
 }
 
 .report-th-label b {
